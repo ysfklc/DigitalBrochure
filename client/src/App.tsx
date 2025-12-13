@@ -126,7 +126,7 @@ function AppLayout() {
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-auto">
             <Switch>
               <Route path="/">
                 <Redirect to="/dashboard" />

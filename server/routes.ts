@@ -14,6 +14,30 @@ import { z } from "zod";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "your-secret-key";
 
+async function seedSuperAdmin() {
+  try {
+    const existingAdmin = await storage.getUserByEmail("superadmin@example.com");
+    if (!existingAdmin) {
+      const hashedPassword = await bcrypt.hash("Super12345", 12);
+      await storage.createUser({
+        email: "superadmin@example.com",
+        password: hashedPassword,
+        firstName: "Super",
+        lastName: "Admin",
+        mobilePhone: null,
+        tenantId: null,
+        role: "super_admin",
+        totpSecret: null,
+        totpEnabled: false,
+        isActive: true
+      });
+      console.log("Super admin user created successfully");
+    }
+  } catch (error) {
+    console.error("Error seeding super admin:", error);
+  }
+}
+
 declare module "express-session" {
   interface SessionData {
     userId?: string;
@@ -79,6 +103,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  await seedSuperAdmin();
+  
   app.use(session({
     secret: JWT_SECRET,
     resave: false,

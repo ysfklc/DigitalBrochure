@@ -129,15 +129,12 @@ export default function ResetPasswordPage() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full min-w-[120px]"
                 disabled={resetMutation.isPending}
                 data-testid="button-reset"
               >
                 {resetMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t("common.loading")}
-                  </>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   t("auth.resetPassword")
                 )}
