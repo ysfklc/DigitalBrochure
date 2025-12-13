@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
   const [pendingLoginData, setPendingLoginData] = useState<{ userId: string; totpRequired: boolean } | null>(null);
+  const [requiresVerification, setRequiresVerification] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -61,14 +65,40 @@ export default function LoginPage() {
         setLocation("/dashboard");
       }
     },
-    onError: () => {
+    onError: (error: any) => {
+      if (error?.requiresVerification) {
+        setRequiresVerification(true);
+        setUnverifiedEmail(error.email || form.getValues("email"));
+        setResendSuccess(false);
+      } else {
+        toast({
+          variant: "destructive",
+          title: t("common.error"),
+          description: t("auth.invalidCredentials"),
+        });
+      }
+    },
+  });
+
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    try {
+      const response = await apiRequest("POST", "/api/auth/resend-verification", { email: unverifiedEmail });
+      setResendSuccess(true);
+      toast({
+        title: t("common.success"),
+        description: "Verification email sent. Please check your inbox.",
+      });
+    } catch (error) {
       toast({
         variant: "destructive",
         title: t("common.error"),
-        description: t("auth.invalidCredentials"),
+        description: "Failed to resend verification email.",
       });
-    },
-  });
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   const onSubmit = (data: LoginFormValues) => {
     loginMutation.mutate(data);
@@ -87,6 +117,60 @@ export default function LoginPage() {
           setPendingLoginData(null);
         }}
       />
+    );
+  }
+
+  if (requiresVerification) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+              <AlertCircle className="h-7 w-7 text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <CardTitle className="text-2xl">Email Verification Required</CardTitle>
+            <CardDescription>
+              Please verify your email address to continue. Check your inbox for a verification link.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-center text-sm text-muted-foreground">
+              {unverifiedEmail && <p>Verification email sent to: <strong>{unverifiedEmail}</strong></p>}
+            </div>
+            {resendSuccess ? (
+              <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 p-3 rounded-md text-sm text-center">
+                Verification email sent! Please check your inbox.
+              </div>
+            ) : (
+              <Button
+                onClick={handleResendVerification}
+                variant="outline"
+                className="w-full"
+                disabled={resendLoading}
+                data-testid="button-resend-verification"
+              >
+                {resendLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Mail className="h-4 w-4 mr-2" />
+                )}
+                Resend Verification Email
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setRequiresVerification(false);
+                setUnverifiedEmail("");
+              }}
+              data-testid="button-back-to-login"
+            >
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

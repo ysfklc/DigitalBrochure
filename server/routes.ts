@@ -11,6 +11,7 @@ import {
   insertMessageSchema, insertSuggestionSchema, insertTutorialSchema
 } from "@shared/schema";
 import { z } from "zod";
+import { generateActivationToken, getActivationTokenExpiry, sendActivationEmail } from "./email";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "your-secret-key";
 
@@ -122,6 +123,8 @@ export async function registerRoutes(
 
       const hashedPassword = await bcrypt.hash(data.password, 12);
       const totpSecret = speakeasy.generateSecret({ name: `eBrochure:${data.email}` });
+      const activationToken = generateActivationToken();
+      const activationTokenExpiry = getActivationTokenExpiry();
 
       const user = await storage.createUser({
         email: data.email,
@@ -133,12 +136,17 @@ export async function registerRoutes(
         role: "tenant_admin",
         totpSecret: totpSecret.base32,
         totpEnabled: false,
-        isActive: true
+        isActive: false,
+        activationToken,
+        activationTokenExpiry
       });
+
+      await sendActivationEmail(data.email, data.firstName, activationToken);
 
       res.json({
         userId: user.id,
-        message: "Registration successful. Please set up your organization."
+        message: "Registration successful. Please check your email to verify your account.",
+        requiresVerification: true
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -164,7 +172,11 @@ export async function registerRoutes(
       }
 
       if (!user.isActive) {
-        return res.status(401).json({ error: "Account is not active" });
+        return res.status(401).json({ 
+          error: "Please verify your email address",
+          requiresVerification: true,
+          email: user.email
+        });
       }
 
       if (user.totpEnabled) {
@@ -296,6 +308,71 @@ export async function registerRoutes(
       res.json({ message: "If an account exists, a reset email has been sent." });
     } catch (error) {
       res.status(500).json({ error: "Failed to process reset request" });
+    }
+  });
+
+  app.get("/api/auth/verify-email", async (req: Request, res: Response) => {
+    try {
+      const token = req.query.token as string;
+      if (!token) {
+        return res.status(400).json({ error: "Verification token is required" });
+      }
+
+      const user = await storage.getUserByActivationToken(token);
+      if (!user) {
+        return res.status(400).json({ error: "Invalid or expired verification token" });
+      }
+
+      if (user.activationTokenExpiry && new Date() > new Date(user.activationTokenExpiry)) {
+        return res.status(400).json({ error: "Verification token has expired. Please request a new one." });
+      }
+
+      await storage.updateUser(user.id, {
+        isActive: true,
+        activationToken: null,
+        activationTokenExpiry: null
+      });
+
+      res.json({ 
+        message: "Email verified successfully. You can now log in.",
+        verified: true
+      });
+    } catch (error) {
+      console.error("Verify email error:", error);
+      res.status(500).json({ error: "Failed to verify email" });
+    }
+  });
+
+  app.post("/api/auth/resend-verification", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json({ message: "If an account exists, a verification email has been sent." });
+      }
+
+      if (user.isActive) {
+        return res.status(400).json({ error: "Email is already verified" });
+      }
+
+      const activationToken = generateActivationToken();
+      const activationTokenExpiry = getActivationTokenExpiry();
+
+      await storage.updateUser(user.id, {
+        activationToken,
+        activationTokenExpiry
+      });
+
+      await sendActivationEmail(user.email, user.firstName, activationToken);
+
+      res.json({ message: "Verification email sent. Please check your inbox." });
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      res.status(500).json({ error: "Failed to resend verification email" });
     }
   });
 

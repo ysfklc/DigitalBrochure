@@ -63,6 +63,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Email Service
 - **Nodemailer**: For sending activation emails, password reset links, and notifications
+- **Configuration**: Uses SMTP credentials stored as secrets (NOT Replit integration)
+  - Required secrets: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `APP_URL`
+  - If SMTP is not configured, activation URLs will be logged to console for testing
 
 ### Authentication Libraries
 - **speakeasy**: TOTP generation and verification for 2FA

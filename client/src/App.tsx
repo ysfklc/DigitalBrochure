@@ -15,6 +15,7 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ResetPasswordPage from "@/pages/reset-password";
+import VerifyEmailPage from "@/pages/verify-email";
 import Setup2FAPage from "@/pages/setup-2fa";
 import SetupTenantPage from "@/pages/setup-tenant";
 import SubscriptionPage from "@/pages/subscription";
@@ -77,6 +78,7 @@ function PublicRoutes() {
       <Route path="/login" component={() => <AuthRoute component={LoginPage} />} />
       <Route path="/register" component={() => <AuthRoute component={RegisterPage} />} />
       <Route path="/reset-password" component={() => <AuthRoute component={ResetPasswordPage} />} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/setup-2fa" component={Setup2FAPage} />
       <Route path="/setup-tenant" component={SetupTenantPage} />
       <Route path="/subscription" component={SubscriptionPage} />
