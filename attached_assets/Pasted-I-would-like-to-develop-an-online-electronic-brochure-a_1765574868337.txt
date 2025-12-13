@@ -1,0 +1,182 @@
+I would like to develop an online electronic brochure and promotional poster application. The goal is to dynamically create brochures on a canvas interface. While creating a brochure, users will be able to select existing products and place them onto brochure pages dynamically. Product prices and discounts will be automatically inserted into the brochure. Brochure templates will be available for selection, and label/tag templates can also be created and selected. All elements will be fully dynamic — including product sizes, label text fonts, colors, template layouts, etc.
+
+The created brochure campaign will be viewable and editable under a “Campaigns” page. Generated brochures can be shared as advertisements or posts on Instagram and/or Facebook, allowing users to run ads directly. Campaign start and end dates can be configured and displayed on the brochure, and date formats/layouts will also be template-driven.
+
+The application will be named e-Brochure.
+
+Website Features
+Authentication & Registration
+
+Login Page
+Users must provide email, password, and captcha token. After validation, TOTP-based 2FA will be required.
+If logging in for the first time, a TOTP key and QR code will be generated; after verification, the user may access the system.
+
+Register Page
+Required fields: email, first name, last name, and mobile phone number.
+Captcha validation is mandatory.
+After successful registration, an activation email will be sent. The account becomes active once the activation link is clicked.
+
+Reset Password Page
+Users must enter their email address and captcha.
+Regardless of whether the email exists, the system will display:
+“If this email exists in our system, a password reset email has been sent.”
+The password-reset link will be valid for 3 hours. After 3 hours, the link becomes invalid.
+
+Subscription Packages
+
+After login, users will see subscription package options:
+
+Monthly plan — €300
+
+6-month plan — €250/month (discounted)
+
+12-month plan — €200/month (discounted)
+
+Users must choose one of these plans and proceed to the payment page.
+
+Payment Method:
+The system will integrate with iyzico as the payment gateway.
+A configuration page accessible only to Super Admin will allow management of iyzico API parameters.
+
+Architecture
+
+The application will operate on a multitenant architecture.
+
+There will be three user roles:
+
+Super Admin – full access, can manage system-wide configurations, view/manage all tenants, and switch between tenants.
+
+Tenant Admin
+
+Tenant User
+
+Products Page
+
+All products will be listed.
+
+Tenants can manually add products; these products will only be visible to their own tenant.
+
+Global and tenant-level product filters will be available.
+
+Super Admin will configure an API endpoint (cURL request) for fetching product data (names, categories, images).
+This sync can run on a scheduled basis or be triggered manually.
+Fetched product data will be saved to the database and shown on the Products page.
+
+Tenant User Management
+
+Tenant Admins can manage users within their own tenant (add/remove/update users).
+
+Localization
+
+The application will support multiple languages:
+
+Turkish
+
+English
+
+German
+
+Dashboard
+
+A standard dashboard will display:
+
+Total campaign count
+
+Active campaign count
+
+Time-based campaign statistics (graphs)
+
+Product usage statistics within campaigns
+
+Other analytical insights
+
+Template (Şablon) Management
+
+Accessible by different roles with different permissions.
+
+Template Types:
+
+Multi-page Templates
+Attributes: Template Title, Cover Page, Inner Page, Back Page, Price Template, Font, Text Color, etc.
+
+Single-page Templates
+Attributes: Template Title, Cover Page, Price Template Type, Font, Text Color, etc.
+
+Each tenant can access and customize only their own templates.
+
+Database & Security
+
+All application data will be stored in PostgreSQL.
+
+Authentication will be handled via local database.
+
+Passwords and all sensitive data will be stored encrypted.
+
+Application Pages & Role Permissions
+Dashboard
+
+Super Admin: View aggregated data for all tenants.
+
+Tenant Admin & Tenant User: View data limited to their own tenant.
+
+Templates
+
+Super Admin: View/edit/delete/create templates for all tenants.
+
+Tenant Admin: Manage templates belonging to their tenant.
+
+Tenant User: View templates belonging to their tenant.
+
+Products
+
+Super Admin: View/add/delete global products and tenant-specific custom products.
+
+Tenant Admin: View global products; manage their tenant’s custom products.
+
+Tenant User: View global products and tenant-specific custom products.
+
+Campaigns
+
+Super Admin: Manage all tenants’ campaigns.
+
+Tenant Admin: Manage their own tenant’s campaigns.
+
+Tenant User: View their tenant’s campaigns.
+
+Sharing
+
+Super Admin: Manage sharing/posts for all tenants.
+
+Tenant Admin: Manage sharing for their tenant.
+
+Tenant User: View sharing items for their tenant.
+
+Suggestions
+
+Super Admin: View all suggestions from all tenants.
+
+Tenant Admin & Tenant User: Submit application-related suggestions.
+
+Messages
+
+Tenant Admins and Tenant Users can send messages to users within their tenant group and to the Super Admin.
+
+Tutorials / Guides
+
+A section that contains:
+
+Videos
+
+PDFs
+
+Announcements
+Super Admin can add/edit/delete all content.
+Tenant Admin/User can only view.
+
+Account Page
+
+Tenant Admin and Tenant User can update their email, name, and mobile number.
+
+Tenant Admins can view/update subscription details.
+
+Tenant Users can only view subscription status and expiry date (if active).
