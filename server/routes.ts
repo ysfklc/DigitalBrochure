@@ -85,6 +85,9 @@ const authenticate = async (req: AuthRequest, res: Response, next: NextFunction)
 };
 
 const requireTenant = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (req.user?.role === "super_admin") {
+    return next();
+  }
   if (!req.user?.tenantId) {
     return res.status(403).json({ error: "Tenant access required" });
   }
@@ -467,6 +470,36 @@ export async function registerRoutes(
       res.json(products);
     } catch (error) {
       res.status(500).json({ error: "Failed to get products" });
+    }
+  });
+
+  // Product search from connectors - MUST be before /api/products/:id to avoid route conflict
+  app.get("/api/products/search", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { q } = req.query;
+      const searchQuery = (q as string) || "";
+      console.log("[DEBUG] /api/products/search called with q:", searchQuery);
+      
+      const connectors = await storage.getEnabledProductConnectors();
+      console.log("[DEBUG] Found connectors:", connectors.length);
+      if (connectors.length === 0) {
+        return res.json([]);
+      }
+
+      const allProducts: any[] = [];
+      for (const connector of connectors) {
+        try {
+          const products = await executeConnectorSearch(connector, searchQuery);
+          allProducts.push(...products.map((p: any) => ({ ...p, connectorId: connector.id, connectorName: connector.name })));
+        } catch (err) {
+          console.error(`Connector ${connector.name} failed:`, err);
+        }
+      }
+
+      console.log("[DEBUG] Returning products:", allProducts.length);
+      res.json(allProducts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search products" });
     }
   });
 
@@ -1162,55 +1195,60 @@ export async function registerRoutes(
     }
   });
 
-  // Product search from connectors (for campaign editor)
-  app.get("/api/products/search", authenticate, async (req: AuthRequest, res: Response) => {
-    try {
-      const { q } = req.query;
-      const searchQuery = (q as string) || "";
-      
-      const connectors = await storage.getEnabledProductConnectors();
-      if (connectors.length === 0) {
-        return res.json([]);
-      }
-
-      const allProducts: any[] = [];
-      for (const connector of connectors) {
-        try {
-          const products = await executeConnectorSearch(connector, searchQuery);
-          allProducts.push(...products.map((p: any) => ({ ...p, connectorId: connector.id, connectorName: connector.name })));
-        } catch (err) {
-          console.error(`Connector ${connector.name} failed:`, err);
-        }
-      }
-
-      res.json(allProducts);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to search products" });
-    }
-  });
-
   return httpServer;
 }
 
 async function executeConnectorSearch(connector: any, searchQuery: string): Promise<any[]> {
   const { requestMethod, requestUrl, requestHeaders, requestParams, requestBody, responseParser, fieldMappings } = connector;
   
-  // Build URL with parameters
-  let url = requestUrl;
-  const params = new URLSearchParams();
+  console.log("[DEBUG] executeConnectorSearch called with searchQuery:", searchQuery);
+  console.log("[DEBUG] Connector config:", { requestMethod, requestUrl, requestParams, responseParser, fieldMappings });
   
+  // Build URL with parameters
+  // First, extract base URL (remove any existing query string that might have empty placeholders)
+  let baseUrl = requestUrl;
+  const existingParams = new URLSearchParams();
+  
+  // Parse existing URL to separate base and query params
+  if (requestUrl.includes("?")) {
+    const urlParts = requestUrl.split("?");
+    baseUrl = urlParts[0];
+    // Parse existing query string but ignore empty values
+    const existingQuery = new URLSearchParams(urlParts[1]);
+    existingQuery.forEach((value, key) => {
+      if (value && value.trim()) {
+        existingParams.append(key, value);
+      }
+    });
+  }
+  
+  // Add request params, replacing empty/placeholder values with search query
   if (requestParams && Array.isArray(requestParams)) {
     for (const param of requestParams) {
       let value = param.value;
-      if (value === "{{search}}") {
+      console.log("[DEBUG] Processing param:", param, "original value:", value);
+      // Use search query if value is empty, matches the key, or is a placeholder
+      if (!value || value === param.key || value === "{{search}}" || value === "q") {
         value = searchQuery;
+        console.log("[DEBUG] Replaced with searchQuery:", value);
       }
-      params.append(param.key, value);
-    }
-    if (params.toString()) {
-      url += (url.includes("?") ? "&" : "?") + params.toString();
+      existingParams.set(param.key, value); // Use set to override any existing empty param
     }
   }
+  
+  // If no requestParams but URL had an empty q= parameter, add search query
+  if ((!requestParams || requestParams.length === 0) && requestUrl.includes("?q=")) {
+    existingParams.set("q", searchQuery);
+    console.log("[DEBUG] No requestParams, but URL has q= placeholder, setting q to:", searchQuery);
+  }
+  
+  // Build final URL
+  let url = baseUrl;
+  if (existingParams.toString()) {
+    url += "?" + existingParams.toString();
+  }
+
+  console.log("[DEBUG] Final request URL:", url);
 
   // Prepare headers
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -1225,17 +1263,21 @@ async function executeConnectorSearch(connector: any, searchQuery: string): Prom
   }
 
   // Make the request
+  console.log("[DEBUG] Making fetch request to:", url);
   const response = await fetch(url, {
     method: requestMethod,
     headers,
     body,
   });
 
+  console.log("[DEBUG] Response status:", response.status, response.statusText);
+
   if (!response.ok) {
     throw new Error(`API request failed: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
+  console.log("[DEBUG] Response data:", JSON.stringify(data).substring(0, 500));
   
   // Parse response using JSONPath-like expression
   let products = parseJsonPath(data, responseParser);

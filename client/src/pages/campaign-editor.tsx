@@ -71,6 +71,15 @@ export default function CampaignEditorPage() {
 
   const { data: externalProducts, isLoading: loadingExternalProducts, refetch: refetchExternal } = useQuery<any[]>({
     queryKey: ["/api/products/search", searchQuery],
+    queryFn: async () => {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(`/api/products/search?q=${encodeURIComponent(searchQuery)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to search products");
+      return res.json();
+    },
     enabled: searchQuery.length >= 2,
   });
 
