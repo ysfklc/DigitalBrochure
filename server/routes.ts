@@ -141,7 +141,7 @@ export async function registerRoutes(
         activationTokenExpiry
       });
 
-      await sendActivationEmail(data.email, data.firstName, activationToken);
+      await sendActivationEmail(data.email, data.firstName, activationToken, storage);
 
       res.json({
         userId: user.id,
@@ -367,7 +367,7 @@ export async function registerRoutes(
         activationTokenExpiry
       });
 
-      await sendActivationEmail(user.email, user.firstName, activationToken);
+      await sendActivationEmail(user.email, user.firstName, activationToken, storage);
 
       res.json({ message: "Verification email sent. Please check your inbox." });
     } catch (error) {
@@ -1044,13 +1044,15 @@ export async function registerRoutes(
 
   app.get("/api/admin/settings", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
     try {
-      const [iyzicoConfig, productApiConfig] = await Promise.all([
+      const [iyzicoConfig, productApiConfig, emailConfig] = await Promise.all([
         storage.getSystemConfig("iyzico"),
-        storage.getSystemConfig("product_api")
+        storage.getSystemConfig("product_api"),
+        storage.getSystemConfig("email")
       ]);
       res.json({
         iyzico: iyzicoConfig?.value || null,
-        productApi: productApiConfig?.value || null
+        productApi: productApiConfig?.value || null,
+        email: emailConfig?.value || null
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to get settings" });
@@ -1075,6 +1077,21 @@ export async function registerRoutes(
       res.json({ success: true, message: "Product sync initiated" });
     } catch (error) {
       res.status(500).json({ error: "Failed to sync products" });
+    }
+  });
+
+  app.post("/api/admin/test-email", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { sendTestEmail } = await import("./email");
+      const user = req.user!;
+      const success = await sendTestEmail(user.email, user.firstName, storage);
+      if (success) {
+        res.json({ success: true, message: "Test email sent" });
+      } else {
+        res.status(500).json({ error: "Failed to send test email" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to send test email" });
     }
   });
 

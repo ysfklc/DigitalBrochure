@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CreditCard, Database, RefreshCw, Settings2, Eye, EyeOff } from "lucide-react";
+import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send } from "lucide-react";
 
 interface IyzicoConfig {
   apiKey: string;
@@ -25,6 +25,16 @@ interface ProductApiConfig {
   method: string;
   headers: string;
   syncSchedule: string;
+  isEnabled: boolean;
+}
+
+interface EmailConfig {
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string;
+  smtpFrom: string;
+  appUrl: string;
   isEnabled: boolean;
 }
 
@@ -48,9 +58,20 @@ export default function SettingsPage() {
     isEnabled: false,
   });
 
+  const [emailForm, setEmailForm] = useState<EmailConfig>({
+    smtpHost: "",
+    smtpPort: 587,
+    smtpUser: "",
+    smtpPass: "",
+    smtpFrom: "noreply@example.com",
+    appUrl: "",
+    isEnabled: false,
+  });
+
   const { data: settings, isLoading } = useQuery<{
     iyzico: IyzicoConfig | null;
     productApi: ProductApiConfig | null;
+    email: EmailConfig | null;
   }>({
     queryKey: ["/api/admin/settings"],
   });
@@ -62,14 +83,14 @@ export default function SettingsPage() {
     if (settings?.productApi) {
       setProductApiForm(settings.productApi);
     }
+    if (settings?.email) {
+      setEmailForm(settings.email);
+    }
   }, [settings]);
 
   const saveIyzicoMutation = useMutation({
     mutationFn: async (data: IyzicoConfig) => {
-      return apiRequest("/api/admin/settings/iyzico", {
-        method: "POST",
-        body: JSON.stringify({ value: data }),
-      });
+      return apiRequest("POST", "/api/admin/settings/iyzico", { value: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
@@ -82,10 +103,7 @@ export default function SettingsPage() {
 
   const saveProductApiMutation = useMutation({
     mutationFn: async (data: ProductApiConfig) => {
-      return apiRequest("/api/admin/settings/product_api", {
-        method: "POST",
-        body: JSON.stringify({ value: data }),
-      });
+      return apiRequest("POST", "/api/admin/settings/product_api", { value: data });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
@@ -98,13 +116,38 @@ export default function SettingsPage() {
 
   const syncProductsMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("/api/admin/sync-products", { method: "POST" });
+      return apiRequest("POST", "/api/admin/sync-products");
     },
     onSuccess: () => {
       toast({ title: t("settings.syncSuccess") });
     },
     onError: () => {
       toast({ title: t("settings.syncError"), variant: "destructive" });
+    },
+  });
+
+  const saveEmailMutation = useMutation({
+    mutationFn: async (data: EmailConfig) => {
+      return apiRequest("POST", "/api/admin/settings/email", { value: data });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      toast({ title: t("settings.saveSuccess") });
+    },
+    onError: () => {
+      toast({ title: t("settings.saveError"), variant: "destructive" });
+    },
+  });
+
+  const testEmailMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/admin/test-email");
+    },
+    onSuccess: () => {
+      toast({ title: t("settings.testEmailSuccess") });
+    },
+    onError: () => {
+      toast({ title: t("settings.testEmailError"), variant: "destructive" });
     },
   });
 
@@ -133,6 +176,10 @@ export default function SettingsPage() {
           <TabsTrigger value="products" data-testid="tab-products">
             <Database className="h-4 w-4 mr-2" />
             {t("settings.productSync")}
+          </TabsTrigger>
+          <TabsTrigger value="email" data-testid="tab-email">
+            <Mail className="h-4 w-4 mr-2" />
+            {t("settings.emailSettings")}
           </TabsTrigger>
         </TabsList>
 
@@ -288,6 +335,122 @@ export default function SettingsPage() {
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${syncProductsMutation.isPending ? "animate-spin" : ""}`} />
                 {t("settings.syncNow")}
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="email">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                {t("settings.emailTitle")}
+              </CardTitle>
+              <CardDescription>{t("settings.emailDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="email-enabled">{t("settings.enableEmail")}</Label>
+                <Switch
+                  id="email-enabled"
+                  checked={emailForm.isEnabled}
+                  onCheckedChange={(checked) => setEmailForm({ ...emailForm, isEnabled: checked })}
+                  data-testid="switch-email-enabled"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-host">{t("settings.smtpHost")}</Label>
+                <Input
+                  id="smtp-host"
+                  value={emailForm.smtpHost}
+                  onChange={(e) => setEmailForm({ ...emailForm, smtpHost: e.target.value })}
+                  placeholder="smtp.example.com"
+                  data-testid="input-smtp-host"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-port">{t("settings.smtpPort")}</Label>
+                <Input
+                  id="smtp-port"
+                  type="number"
+                  value={emailForm.smtpPort}
+                  onChange={(e) => setEmailForm({ ...emailForm, smtpPort: parseInt(e.target.value) || 587 })}
+                  placeholder="587"
+                  data-testid="input-smtp-port"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-user">{t("settings.smtpUser")}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="smtp-user"
+                    type={showSecrets ? "text" : "password"}
+                    value={emailForm.smtpUser}
+                    onChange={(e) => setEmailForm({ ...emailForm, smtpUser: e.target.value })}
+                    placeholder={t("settings.smtpUserPlaceholder")}
+                    data-testid="input-smtp-user"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowSecrets(!showSecrets)}
+                    data-testid="button-toggle-email-secrets"
+                  >
+                    {showSecrets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-pass">{t("settings.smtpPass")}</Label>
+                <Input
+                  id="smtp-pass"
+                  type={showSecrets ? "text" : "password"}
+                  value={emailForm.smtpPass}
+                  onChange={(e) => setEmailForm({ ...emailForm, smtpPass: e.target.value })}
+                  placeholder={t("settings.smtpPassPlaceholder")}
+                  data-testid="input-smtp-pass"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-from">{t("settings.smtpFrom")}</Label>
+                <Input
+                  id="smtp-from"
+                  type="email"
+                  value={emailForm.smtpFrom}
+                  onChange={(e) => setEmailForm({ ...emailForm, smtpFrom: e.target.value })}
+                  placeholder="noreply@example.com"
+                  data-testid="input-smtp-from"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="app-url">{t("settings.appUrl")}</Label>
+                <Input
+                  id="app-url"
+                  value={emailForm.appUrl}
+                  onChange={(e) => setEmailForm({ ...emailForm, appUrl: e.target.value })}
+                  placeholder="https://yourapp.com"
+                  data-testid="input-app-url"
+                />
+                <p className="text-xs text-muted-foreground">{t("settings.appUrlHint")}</p>
+              </div>
+            </CardContent>
+            <CardFooter className="flex gap-2 flex-wrap">
+              <Button
+                onClick={() => saveEmailMutation.mutate(emailForm)}
+                disabled={saveEmailMutation.isPending}
+                data-testid="button-save-email"
+              >
+                {saveEmailMutation.isPending ? t("common.saving") : t("common.save")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => testEmailMutation.mutate()}
+                disabled={testEmailMutation.isPending || !emailForm.isEnabled}
+                data-testid="button-test-email"
+              >
+                <Send className={`h-4 w-4 mr-2 ${testEmailMutation.isPending ? "animate-spin" : ""}`} />
+                {t("settings.testEmail")}
               </Button>
             </CardFooter>
           </Card>
