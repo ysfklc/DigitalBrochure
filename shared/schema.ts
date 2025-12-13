@@ -149,6 +149,22 @@ export const systemConfig = pgTable("system_config", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const productConnectors = pgTable("product_connectors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  isEnabled: boolean("is_enabled").default(true),
+  requestMethod: text("request_method").notNull().default("GET"),
+  requestUrl: text("request_url").notNull(),
+  requestHeaders: jsonb("request_headers").default({}),
+  requestParams: jsonb("request_params").default([]),
+  requestBody: text("request_body"),
+  responseParser: text("response_parser").notNull(),
+  fieldMappings: jsonb("field_mappings").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   users: many(users),
   subscriptions: many(subscriptions),
@@ -213,6 +229,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({ id: true,
 export const insertSuggestionSchema = createInsertSchema(suggestions).omit({ id: true, createdAt: true });
 export const insertTutorialSchema = createInsertSchema(tutorials).omit({ id: true, createdAt: true });
 export const insertSystemConfigSchema = createInsertSchema(systemConfig).omit({ id: true, updatedAt: true });
+export const insertProductConnectorSchema = createInsertSchema(productConnectors).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
@@ -236,6 +253,8 @@ export type Tutorial = typeof tutorials.$inferSelect;
 export type InsertTutorial = z.infer<typeof insertTutorialSchema>;
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
+export type ProductConnector = typeof productConnectors.$inferSelect;
+export type InsertProductConnector = z.infer<typeof insertProductConnectorSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),

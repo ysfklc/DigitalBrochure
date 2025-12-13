@@ -2,13 +2,13 @@ import { eq, and, or, desc, ilike } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, products, templates,
-  campaigns, campaignProducts, messages, suggestions, tutorials, systemConfig,
+  campaigns, campaignProducts, messages, suggestions, tutorials, systemConfig, productConnectors,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Product, type InsertProduct,
   type Template, type InsertTemplate, type Campaign, type InsertCampaign,
   type CampaignProduct, type InsertCampaignProduct, type Message, type InsertMessage,
   type Suggestion, type InsertSuggestion, type Tutorial, type InsertTutorial,
-  type SystemConfig, type InsertSystemConfig
+  type SystemConfig, type InsertSystemConfig, type ProductConnector, type InsertProductConnector
 } from "@shared/schema";
 
 export interface IStorage {
@@ -77,6 +77,13 @@ export interface IStorage {
 
   getSystemConfig(key: string): Promise<SystemConfig | undefined>;
   setSystemConfig(key: string, value: any): Promise<SystemConfig>;
+
+  getProductConnector(id: string): Promise<ProductConnector | undefined>;
+  getAllProductConnectors(): Promise<ProductConnector[]>;
+  getEnabledProductConnectors(): Promise<ProductConnector[]>;
+  createProductConnector(connector: InsertProductConnector): Promise<ProductConnector>;
+  updateProductConnector(id: string, data: Partial<InsertProductConnector>): Promise<ProductConnector | undefined>;
+  deleteProductConnector(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -373,6 +380,39 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(systemConfig).values({ key, value }).returning();
     return created;
+  }
+
+  async getProductConnector(id: string): Promise<ProductConnector | undefined> {
+    const [connector] = await db.select().from(productConnectors).where(eq(productConnectors.id, id));
+    return connector;
+  }
+
+  async getAllProductConnectors(): Promise<ProductConnector[]> {
+    return db.select().from(productConnectors).orderBy(desc(productConnectors.createdAt));
+  }
+
+  async getEnabledProductConnectors(): Promise<ProductConnector[]> {
+    return db.select().from(productConnectors)
+      .where(eq(productConnectors.isEnabled, true))
+      .orderBy(desc(productConnectors.createdAt));
+  }
+
+  async createProductConnector(connector: InsertProductConnector): Promise<ProductConnector> {
+    const [created] = await db.insert(productConnectors).values(connector).returning();
+    return created;
+  }
+
+  async updateProductConnector(id: string, data: Partial<InsertProductConnector>): Promise<ProductConnector | undefined> {
+    const [updated] = await db.update(productConnectors)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(productConnectors.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProductConnector(id: string): Promise<boolean> {
+    await db.delete(productConnectors).where(eq(productConnectors.id, id));
+    return true;
   }
 }
 

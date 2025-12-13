@@ -76,3 +76,11 @@ Preferred communication style: Simple, everyday language.
 
 ### Social Media Integration
 - Designed for sharing campaigns to Instagram and Facebook (implementation pending)
+
+### Product Connectors
+- **Dynamic Product Search**: Super Admins can configure external API connectors to fetch products in real-time
+- **Configuration Options**: Request method, URL, headers, parameters, and body
+- **Response Parsing**: JSONPath-like syntax to extract product arrays from API responses
+- **Field Mappings**: Map API response fields to product properties (name, image, price, sku)
+- **Campaign Integration**: Campaign editor combines local products with external search results
+- **Test Functionality**: Test connectors with sample queries before enabling

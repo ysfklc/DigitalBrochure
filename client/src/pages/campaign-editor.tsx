@@ -69,6 +69,11 @@ export default function CampaignEditorPage() {
     queryKey: ["/api/products"],
   });
 
+  const { data: externalProducts, isLoading: loadingExternalProducts, refetch: refetchExternal } = useQuery<any[]>({
+    queryKey: ["/api/products/search", searchQuery],
+    enabled: searchQuery.length >= 2,
+  });
+
   const { data: templates } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
   });
@@ -76,6 +81,14 @@ export default function CampaignEditorPage() {
   const filteredProducts = products?.filter((product) =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const allProducts = [
+    ...(filteredProducts || []),
+    ...(externalProducts || []).map((p: any) => ({
+      ...p,
+      isExternal: true,
+    })),
+  ];
 
   const handleSave = () => {
     toast({
@@ -236,12 +249,12 @@ export default function CampaignEditorPage() {
               </div>
               <ScrollArea className="flex-1 h-[calc(100vh-200px)]">
                 <div className="p-2 space-y-2">
-                  {loadingProducts ? (
+                  {loadingProducts || loadingExternalProducts ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <Skeleton key={i} className="h-20 w-full" />
                     ))
-                  ) : filteredProducts?.length ? (
-                    filteredProducts.map((product) => (
+                  ) : allProducts?.length ? (
+                    allProducts.map((product: any) => (
                       <div
                         key={product.id}
                         draggable
@@ -261,7 +274,12 @@ export default function CampaignEditorPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{product.name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-sm font-medium truncate">{product.name}</p>
+                            {product.isExternal && (
+                              <Badge variant="outline" className="text-xs px-1 py-0">{t("products.external")}</Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">${product.price}</p>
                         </div>
                         <GripVertical className="h-4 w-4 text-muted-foreground" />

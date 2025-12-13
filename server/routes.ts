@@ -1095,5 +1095,200 @@ export async function registerRoutes(
     }
   });
 
+  // Product Connector routes
+  app.get("/api/admin/product-connectors", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const connectors = await storage.getAllProductConnectors();
+      res.json(connectors);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get product connectors" });
+    }
+  });
+
+  app.get("/api/admin/product-connectors/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const connector = await storage.getProductConnector(req.params.id);
+      if (!connector) {
+        return res.status(404).json({ error: "Connector not found" });
+      }
+      res.json(connector);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get product connector" });
+    }
+  });
+
+  app.post("/api/admin/product-connectors", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const connector = await storage.createProductConnector(req.body);
+      res.status(201).json(connector);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create product connector" });
+    }
+  });
+
+  app.patch("/api/admin/product-connectors/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const connector = await storage.updateProductConnector(req.params.id, req.body);
+      if (!connector) {
+        return res.status(404).json({ error: "Connector not found" });
+      }
+      res.json(connector);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update product connector" });
+    }
+  });
+
+  app.delete("/api/admin/product-connectors/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.deleteProductConnector(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete product connector" });
+    }
+  });
+
+  app.post("/api/admin/product-connectors/:id/test", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const connector = await storage.getProductConnector(req.params.id);
+      if (!connector) {
+        return res.status(404).json({ error: "Connector not found" });
+      }
+      
+      const { searchQuery } = req.body;
+      const result = await executeConnectorSearch(connector, searchQuery || "test");
+      res.json({ success: true, products: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to test connector" });
+    }
+  });
+
+  // Product search from connectors (for campaign editor)
+  app.get("/api/products/search", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { q } = req.query;
+      const searchQuery = (q as string) || "";
+      
+      const connectors = await storage.getEnabledProductConnectors();
+      if (connectors.length === 0) {
+        return res.json([]);
+      }
+
+      const allProducts: any[] = [];
+      for (const connector of connectors) {
+        try {
+          const products = await executeConnectorSearch(connector, searchQuery);
+          allProducts.push(...products.map((p: any) => ({ ...p, connectorId: connector.id, connectorName: connector.name })));
+        } catch (err) {
+          console.error(`Connector ${connector.name} failed:`, err);
+        }
+      }
+
+      res.json(allProducts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search products" });
+    }
+  });
+
   return httpServer;
+}
+
+async function executeConnectorSearch(connector: any, searchQuery: string): Promise<any[]> {
+  const { requestMethod, requestUrl, requestHeaders, requestParams, requestBody, responseParser, fieldMappings } = connector;
+  
+  // Build URL with parameters
+  let url = requestUrl;
+  const params = new URLSearchParams();
+  
+  if (requestParams && Array.isArray(requestParams)) {
+    for (const param of requestParams) {
+      let value = param.value;
+      if (value === "{{search}}") {
+        value = searchQuery;
+      }
+      params.append(param.key, value);
+    }
+    if (params.toString()) {
+      url += (url.includes("?") ? "&" : "?") + params.toString();
+    }
+  }
+
+  // Prepare headers
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (requestHeaders && typeof requestHeaders === "object") {
+    Object.assign(headers, requestHeaders);
+  }
+
+  // Prepare request body
+  let body: string | undefined;
+  if (requestMethod !== "GET" && requestBody) {
+    body = requestBody.replace(/\{\{search\}\}/g, searchQuery);
+  }
+
+  // Make the request
+  const response = await fetch(url, {
+    method: requestMethod,
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  
+  // Parse response using JSONPath-like expression
+  let products = parseJsonPath(data, responseParser);
+  
+  if (!Array.isArray(products)) {
+    products = [products];
+  }
+
+  // Map fields according to fieldMappings
+  const mappings = fieldMappings as { name: string; image: string; price?: string; sku?: string };
+  return products.map((item: any) => ({
+    id: `external-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    name: getValueByPath(item, mappings.name || "") || "Unknown Product",
+    imageUrl: getValueByPath(item, mappings.image || "") || "",
+    price: getValueByPath(item, mappings.price || "") || "0",
+    sku: getValueByPath(item, mappings.sku || "") || "",
+    isExternal: true,
+  }));
+}
+
+function parseJsonPath(data: any, path: string): any {
+  if (!path || path === "$" || path === ".") {
+    return data;
+  }
+  
+  // Handle jq-like syntax: .data.products or $.data.products
+  const cleanPath = path.replace(/^\$\.?/, "").replace(/^\./, "");
+  if (!cleanPath) return data;
+  
+  const parts = cleanPath.split(/\.|\[|\]/).filter(Boolean);
+  let result = data;
+  
+  for (const part of parts) {
+    if (result === undefined || result === null) break;
+    if (Array.isArray(result) && part === "*") {
+      continue;
+    }
+    result = result[part];
+  }
+  
+  return result;
+}
+
+function getValueByPath(obj: any, path: string): any {
+  if (!path) return undefined;
+  const cleanPath = path.replace(/^\$\.?/, "").replace(/^\./, "");
+  const parts = cleanPath.split(/\.|\[|\]/).filter(Boolean);
+  let result = obj;
+  
+  for (const part of parts) {
+    if (result === undefined || result === null) break;
+    result = result[part];
+  }
+  
+  return result;
 }
