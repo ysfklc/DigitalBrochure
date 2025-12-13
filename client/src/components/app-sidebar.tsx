@@ -11,7 +11,9 @@ import {
   BookOpen, 
   Settings, 
   Users,
-  LogOut
+  LogOut,
+  Building2,
+  Settings2
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,6 +53,11 @@ export function AppSidebar() {
 
   const adminItems = [
     { title: t("nav.users"), url: "/users", icon: Users },
+  ];
+
+  const superAdminItems = [
+    { title: t("nav.tenants"), url: "/tenants", icon: Building2 },
+    { title: t("nav.settings"), url: "/settings", icon: Settings2 },
   ];
 
   const isActive = (url: string) => location === url || (url !== "/dashboard" && location.startsWith(url));
@@ -138,6 +145,32 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {adminItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      data-testid={`nav-${item.url.slice(1)}`}
+                    >
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {user?.role === "super_admin" && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="px-2 text-xs font-medium text-muted-foreground uppercase tracking-wider" data-testid="nav-superadmin-section">
+              {t("nav.superAdmin")}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {superAdminItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild

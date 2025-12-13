@@ -831,27 +831,173 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/dashboard/stats", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+  app.get("/api/dashboard/stats", authenticate, async (req: AuthRequest, res: Response) => {
     try {
-      const [products, campaigns, templates] = await Promise.all([
-        storage.getProductsByTenant(req.user!.tenantId!),
-        storage.getCampaignsByTenant(req.user!.tenantId!),
-        storage.getTemplatesByTenant(req.user!.tenantId!)
-      ]);
+      if (req.user!.role === "super_admin") {
+        const tenants = await storage.getAllTenants();
+        const allSuggestions = await storage.getAllSuggestions();
+        res.json({
+          totalTenants: tenants.length,
+          totalSuggestions: allSuggestions.length,
+          pendingSuggestions: allSuggestions.filter(s => s.status === "pending").length,
+          recentTenants: tenants.slice(0, 5)
+        });
+      } else {
+        const [products, campaigns, templates] = await Promise.all([
+          storage.getProductsByTenant(req.user!.tenantId!),
+          storage.getCampaignsByTenant(req.user!.tenantId!),
+          storage.getTemplatesByTenant(req.user!.tenantId!)
+        ]);
 
-      const activeCampaigns = campaigns.filter(c => c.status === "active").length;
-      const draftCampaigns = campaigns.filter(c => c.status === "draft").length;
+        const activeCampaigns = campaigns.filter(c => c.status === "active").length;
+        const draftCampaigns = campaigns.filter(c => c.status === "draft").length;
 
-      res.json({
-        totalProducts: products.length,
-        totalCampaigns: campaigns.length,
-        activeCampaigns,
-        draftCampaigns,
-        totalTemplates: templates.length,
-        recentCampaigns: campaigns.slice(0, 5)
-      });
+        res.json({
+          totalProducts: products.length,
+          totalCampaigns: campaigns.length,
+          activeCampaigns,
+          draftCampaigns,
+          totalTemplates: templates.length,
+          recentCampaigns: campaigns.slice(0, 5)
+        });
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to get dashboard stats" });
+    }
+  });
+
+  app.get("/api/admin/tenants", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const tenants = await storage.getAllTenants();
+      const tenantsWithDetails = await Promise.all(
+        tenants.map(async (tenant) => {
+          const users = await storage.getUsersByTenant(tenant.id);
+          const subscription = await storage.getSubscriptionByTenant(tenant.id);
+          return {
+            ...tenant,
+            userCount: users.length,
+            subscription
+          };
+        })
+      );
+      res.json(tenantsWithDetails);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get tenants" });
+    }
+  });
+
+  app.get("/api/admin/tenants/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      const users = await storage.getUsersByTenant(tenant.id);
+      const subscription = await storage.getSubscriptionByTenant(tenant.id);
+      const campaigns = await storage.getCampaignsByTenant(tenant.id);
+      res.json({
+        ...tenant,
+        users: users.map(({ password, totpSecret, ...u }) => u),
+        subscription,
+        campaignCount: campaigns.length
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get tenant" });
+    }
+  });
+
+  app.post("/api/admin/tenants", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { name, slug } = req.body;
+      const existingTenant = await storage.getTenantBySlug(slug);
+      if (existingTenant) {
+        return res.status(400).json({ error: "Tenant slug already exists" });
+      }
+      const tenant = await storage.createTenant({ name, slug });
+      res.json(tenant);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create tenant" });
+    }
+  });
+
+  app.patch("/api/admin/tenants/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const tenant = await storage.updateTenant(req.params.id, req.body);
+      res.json(tenant);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update tenant" });
+    }
+  });
+
+  app.delete("/api/admin/tenants/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.deleteTenant(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
+  app.get("/api/admin/suggestions", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const allSuggestions = await storage.getAllSuggestions();
+      res.json(allSuggestions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get suggestions" });
+    }
+  });
+
+  app.delete("/api/admin/suggestions/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.deleteSuggestion(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete suggestion" });
+    }
+  });
+
+  app.get("/api/admin/settings/:key", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const config = await storage.getSystemConfig(req.params.key);
+      res.json(config?.value || null);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get setting" });
+    }
+  });
+
+  app.get("/api/admin/settings", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const [iyzicoConfig, productApiConfig] = await Promise.all([
+        storage.getSystemConfig("iyzico"),
+        storage.getSystemConfig("product_api")
+      ]);
+      res.json({
+        iyzico: iyzicoConfig?.value || null,
+        productApi: productApiConfig?.value || null
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get settings" });
+    }
+  });
+
+  app.post("/api/admin/settings/:key", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const config = await storage.setSystemConfig(req.params.key, req.body.value);
+      res.json(config);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save setting" });
+    }
+  });
+
+  app.post("/api/admin/sync-products", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const productApiConfig = await storage.getSystemConfig("product_api");
+      if (!productApiConfig?.value) {
+        return res.status(400).json({ error: "Product API not configured" });
+      }
+      res.json({ success: true, message: "Product sync initiated" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to sync products" });
     }
   });
 

@@ -21,8 +21,10 @@ export interface IStorage {
 
   getTenant(id: string): Promise<Tenant | undefined>;
   getTenantBySlug(slug: string): Promise<Tenant | undefined>;
+  getAllTenants(): Promise<Tenant[]>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
+  deleteTenant(id: string): Promise<boolean>;
 
   getSubscription(id: string): Promise<Subscription | undefined>;
   getSubscriptionByTenant(tenantId: string): Promise<Subscription | undefined>;
@@ -61,8 +63,10 @@ export interface IStorage {
 
   getSuggestion(id: string): Promise<Suggestion | undefined>;
   getSuggestionsByTenant(tenantId: string): Promise<Suggestion[]>;
+  getAllSuggestions(): Promise<Suggestion[]>;
   createSuggestion(suggestion: InsertSuggestion): Promise<Suggestion>;
   updateSuggestion(id: string, data: Partial<InsertSuggestion>): Promise<Suggestion | undefined>;
+  deleteSuggestion(id: string): Promise<boolean>;
 
   getTutorial(id: string): Promise<Tutorial | undefined>;
   getAllTutorials(): Promise<Tutorial[]>;
@@ -122,6 +126,15 @@ export class DatabaseStorage implements IStorage {
   async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
     const [updated] = await db.update(tenants).set(data).where(eq(tenants.id, id)).returning();
     return updated;
+  }
+
+  async getAllTenants(): Promise<Tenant[]> {
+    return db.select().from(tenants).orderBy(desc(tenants.createdAt));
+  }
+
+  async deleteTenant(id: string): Promise<boolean> {
+    await db.delete(tenants).where(eq(tenants.id, id));
+    return true;
   }
 
   async getSubscription(id: string): Promise<Subscription | undefined> {
@@ -301,6 +314,15 @@ export class DatabaseStorage implements IStorage {
   async updateSuggestion(id: string, data: Partial<InsertSuggestion>): Promise<Suggestion | undefined> {
     const [updated] = await db.update(suggestions).set(data).where(eq(suggestions.id, id)).returning();
     return updated;
+  }
+
+  async getAllSuggestions(): Promise<Suggestion[]> {
+    return db.select().from(suggestions).orderBy(desc(suggestions.createdAt));
+  }
+
+  async deleteSuggestion(id: string): Promise<boolean> {
+    await db.delete(suggestions).where(eq(suggestions.id, id));
+    return true;
   }
 
   async getTutorial(id: string): Promise<Tutorial | undefined> {
