@@ -16,6 +16,7 @@ import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ResetPasswordPage from "@/pages/reset-password";
 import Setup2FAPage from "@/pages/setup-2fa";
+import SetupTenantPage from "@/pages/setup-tenant";
 import SubscriptionPage from "@/pages/subscription";
 import DashboardPage from "@/pages/dashboard";
 import ProductsPage from "@/pages/products";
@@ -75,6 +76,7 @@ function PublicRoutes() {
       <Route path="/register" component={() => <AuthRoute component={RegisterPage} />} />
       <Route path="/reset-password" component={() => <AuthRoute component={ResetPasswordPage} />} />
       <Route path="/setup-2fa" component={Setup2FAPage} />
+      <Route path="/setup-tenant" component={SetupTenantPage} />
       <Route path="/subscription" component={SubscriptionPage} />
       <Route component={NotFound} />
     </Switch>
@@ -103,7 +105,7 @@ function ProtectedRoutes() {
 }
 
 function AppLayout() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -112,6 +114,17 @@ function AppLayout() {
 
   if (!isAuthenticated) {
     return <PublicRoutes />;
+  }
+
+  if (user && !user.tenantId && user.role !== "super_admin") {
+    return (
+      <Switch>
+        <Route path="/setup-tenant" component={SetupTenantPage} />
+        <Route>
+          <Redirect to="/setup-tenant" />
+        </Route>
+      </Switch>
+    );
   }
 
   return (

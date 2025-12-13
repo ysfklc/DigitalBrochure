@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import session from "express-session";
 import {
-  loginSchema, registerSchema, resetPasswordSchema, verifyTotpSchema,
+  loginSchema, registerSchema, resetPasswordSchema, verifyTotpSchema, tenantSetupSchema,
   insertProductSchema, insertTemplateSchema, insertCampaignSchema,
   insertMessageSchema, insertSuggestionSchema, insertTutorialSchema
 } from "@shared/schema";
@@ -121,13 +121,6 @@ export async function registerRoutes(
       }
 
       const hashedPassword = await bcrypt.hash(data.password, 12);
-      const slug = data.email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "") + "-" + Date.now().toString(36);
-      
-      const tenant = await storage.createTenant({
-        name: `${data.firstName}'s Organization`,
-        slug
-      });
-
       const totpSecret = speakeasy.generateSecret({ name: `eBrochure:${data.email}` });
 
       const user = await storage.createUser({
@@ -136,7 +129,7 @@ export async function registerRoutes(
         firstName: data.firstName,
         lastName: data.lastName,
         mobilePhone: data.mobilePhone || null,
-        tenantId: tenant.id,
+        tenantId: null,
         role: "tenant_admin",
         totpSecret: totpSecret.base32,
         totpEnabled: false,
@@ -145,7 +138,7 @@ export async function registerRoutes(
 
       res.json({
         userId: user.id,
-        message: "Registration successful. Please set up 2FA."
+        message: "Registration successful. Please set up your organization."
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -316,6 +309,32 @@ export async function registerRoutes(
       res.json(safeUser);
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
+    }
+  });
+
+  app.post("/api/tenant/setup", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const data = tenantSetupSchema.parse(req.body);
+
+      if (req.user!.tenantId) {
+        return res.status(400).json({ error: "User already has an organization" });
+      }
+
+      const existingTenant = await storage.getTenantBySlug(data.slug);
+      if (existingTenant) {
+        return res.status(400).json({ error: "This organization URL is already taken" });
+      }
+
+      const tenant = await storage.createTenant({ name: data.name, slug: data.slug });
+      await storage.updateUser(req.user!.id, { tenantId: tenant.id });
+
+      res.json({ tenant, message: "Organization created successfully" });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0]?.message || "Invalid input" });
+      }
+      console.error("Tenant setup error:", error);
+      res.status(500).json({ error: "Failed to create organization" });
     }
   });
 

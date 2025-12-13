@@ -261,6 +261,15 @@ export const verifyTotpSchema = z.object({
   token: z.string().length(6),
 });
 
+export const tenantSetupSchema = z.object({
+  name: z.string().min(2, "Organization name must be at least 2 characters").max(100),
+  slug: z.string()
+    .min(3, "Slug must be at least 3 characters")
+    .max(50, "Slug must be less than 50 characters")
+    .regex(/^[a-z0-9-]+$/, "Slug can only contain lowercase letters, numbers, and hyphens")
+    .transform(val => val.toLowerCase().trim()),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
