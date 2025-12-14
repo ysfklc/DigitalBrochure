@@ -173,6 +173,7 @@ export default function TemplateEditorPage() {
   const [headerHeight, setHeaderHeight] = useState(80);
   const [footerHeight, setFooterHeight] = useState(60);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  const [copiedElement, setCopiedElement] = useState<CanvasElement | null>(null);
 
   const { data: template, isLoading: loadingTemplate } = useQuery<Template>({
     queryKey: ['/api/templates', id],
@@ -197,6 +198,60 @@ export default function TemplateEditorPage() {
       }
     }
   }, [template]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      
+      if (isInputField) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        if (selectedElement) {
+          const elementToCopy = canvasElements.find(el => el.id === selectedElement);
+          if (elementToCopy) {
+            setCopiedElement({ ...elementToCopy });
+            toast({
+              title: t("common.success"),
+              description: t("editor.elementCopied"),
+            });
+          }
+        }
+        e.preventDefault();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        if (copiedElement) {
+          const newElement: CanvasElement = {
+            ...copiedElement,
+            id: `${copiedElement.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            x: copiedElement.x + 20,
+            y: copiedElement.y + 20,
+            data: { ...copiedElement.data },
+            page: currentPage,
+          };
+          setCanvasElements(prev => [...prev, newElement]);
+          setSelectedElement(newElement.id);
+          toast({
+            title: t("common.success"),
+            description: t("editor.elementPasted"),
+          });
+        }
+        e.preventDefault();
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedElement) {
+          setCanvasElements(prev => prev.filter(el => el.id !== selectedElement));
+          setSelectedElement(null);
+        }
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElement, canvasElements, copiedElement, currentPage, t, toast]);
 
   const createTemplateMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -1389,6 +1444,28 @@ export default function TemplateEditorPage() {
             </ScrollArea>
           ) : (
             <div className="p-4 space-y-4">
+              <div>
+                <Label className="text-xs">{t("templates.templateType")}</Label>
+                <Select value={templateType} onValueChange={(v) => setTemplateType(v as "single_page" | "multi_page")}>
+                  <SelectTrigger className="mt-1" data-testid="select-template-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single_page">
+                      <div className="flex flex-col">
+                        <span>{t("templates.singlePage")}</span>
+                        <span className="text-xs text-muted-foreground">{t("templates.singlePageDesc")}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="multi_page">
+                      <div className="flex flex-col">
+                        <span>{t("templates.multiPage")}</span>
+                        <span className="text-xs text-muted-foreground">{t("templates.multiPageDesc")}</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label className="text-xs">{t("editor.canvasSize")}</Label>
                 <Select value={canvasSize} onValueChange={(v) => setCanvasSize(v as CanvasSizeKey)}>

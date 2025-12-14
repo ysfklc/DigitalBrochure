@@ -45,3 +45,17 @@
     - Canvas size options (square, portrait, landscape, A4)
     - Updated templates.tsx to navigate to editor instead of dialog
     - Added routes in App.tsx for /templates/new and /templates/:id/edit
+[x] 30. Environment migration completed (December 14, 2025) - npm install, db:push, workflow running on port 5000
+[x] 31. Template Editor i18n and Template Type improvements (December 14, 2025):
+    - Added missing i18n translations for template editor (EN/TR)
+    - New keys: createTemplate, saveTemplate, enterTemplateName, savedSuccessfully, saveFailed, nameRequired
+    - New keys: singlePageDesc, multiPageDesc, selectTemplateType
+    - New editor keys: shapeFill, shapeStroke, drawColor, presetColors, positionX, positionY, selectElementToEdit
+    - Added Single Page / Multi Page template type selector in properties panel
+[x] 32. Keyboard shortcuts for canvas editor (December 14, 2025):
+    - Ctrl+C / Cmd+C: Copy selected element
+    - Ctrl+V / Cmd+V: Paste copied element (with offset)
+    - Delete / Backspace: Delete selected element
+    - Added copiedElement state to store copied element data
+    - Added keyboard event listener with proper input field detection
+    - Added i18n translations for elementCopied and elementPasted (EN/TR)
