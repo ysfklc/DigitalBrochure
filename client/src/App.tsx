@@ -33,6 +33,7 @@ import UsersPage from "@/pages/users";
 import SharingPage from "@/pages/sharing";
 import TenantsPage from "@/pages/tenants";
 import SettingsPage from "@/pages/settings";
+import OrganizationSettingsPage from "@/pages/organization-settings";
 
 function ProtectedRoute({ component: Component }: { component: () => JSX.Element }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -104,6 +105,7 @@ function ProtectedRoutes() {
       <Route path="/tutorials" component={() => <ProtectedRoute component={TutorialsPage} />} />
       <Route path="/account" component={() => <ProtectedRoute component={AccountPage} />} />
       <Route path="/users" component={() => <ProtectedRoute component={UsersPage} />} />
+      <Route path="/organization" component={() => <ProtectedRoute component={OrganizationSettingsPage} />} />
       <Route path="/tenants" component={() => <ProtectedRoute component={TenantsPage} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
       <Route component={NotFound} />

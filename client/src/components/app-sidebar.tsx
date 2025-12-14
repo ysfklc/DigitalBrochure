@@ -13,7 +13,8 @@ import {
   Users,
   LogOut,
   Building2,
-  Settings2
+  Settings2,
+  Building
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,6 +54,7 @@ export function AppSidebar() {
 
   const adminItems = [
     { title: t("nav.users"), url: "/users", icon: Users },
+    { title: t("nav.organization"), url: "/organization", icon: Building },
   ];
 
   const superAdminItems = [

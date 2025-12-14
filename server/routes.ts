@@ -498,6 +498,50 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/tenant/logo", authenticate, requireTenant, upload.single("logo"), async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user!.role !== "tenant_admin" && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "Only admins can upload organization logo" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const logoUrl = `/uploads/${req.file.filename}`;
+      await storage.updateTenant(req.user!.tenantId!, { logoUrl });
+      
+      res.json({ logoUrl, message: "Logo uploaded successfully" });
+    } catch (error) {
+      console.error("Logo upload error:", error);
+      res.status(500).json({ error: "Failed to upload logo" });
+    }
+  });
+
+  app.delete("/api/tenant/logo", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user!.role !== "tenant_admin" && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "Only admins can remove organization logo" });
+      }
+
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      if (tenant?.logoUrl) {
+        const filename = tenant.logoUrl.replace("/uploads/", "");
+        const filePath = path.join(uploadsDir, filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+
+      await storage.updateTenant(req.user!.tenantId!, { logoUrl: null });
+      
+      res.json({ message: "Logo removed successfully" });
+    } catch (error) {
+      console.error("Logo remove error:", error);
+      res.status(500).json({ error: "Failed to remove logo" });
+    }
+  });
+
   app.get("/api/tenant/by-code/:code", async (req: Request, res: Response) => {
     try {
       const tenant = await storage.getTenantByCode(req.params.code.toUpperCase());

@@ -51,3 +51,18 @@
     - Result: Fetched from /api/campaigns (list) instead of /api/campaigns/${id} (individual)
     - Fix: Changed queryKey to [`/api/campaigns/${id}`] so correct campaign with canvasData is loaded
     - Products and canvas design should now be restored when editing an existing campaign
+[x] 24. Environment migration verified (December 14, 2025):
+    - npm install completed successfully
+    - Workflow configured with webview output on port 5000
+    - Application running - super admin user created, server serving on port 5000
+    - Import completed
+[x] 25. Added Organization Settings page with logo upload for Tenant Admins (December 14, 2025):
+    - Created new page at /organization for tenant admins to manage organization settings
+    - Added logo upload functionality with POST /api/tenant/logo endpoint
+    - Added logo removal functionality with DELETE /api/tenant/logo endpoint
+    - Added "Organization" navigation link in sidebar Administration section for tenant admins
+    - Displays organization name and code
+    - Shows current logo with fallback to organization initials
+    - Supports JPG, PNG, GIF, WebP formats up to 5MB
+    - Added translations for English, Turkish, and German
+    - Application verified running on port 5000
