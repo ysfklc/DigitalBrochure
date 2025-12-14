@@ -104,7 +104,7 @@ const userFormSchema = z.object({
   email: z.string().email("Invalid email address"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["tenant_admin", "tenant_user"]),
+  role: z.enum(["super_admin", "tenant_admin", "tenant_user"]),
   mobilePhone: z.string().optional(),
 });
 
@@ -636,6 +636,9 @@ export default function UsersPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        {currentUser?.role === "super_admin" && (
+                          <SelectItem value="super_admin">{t("users.superAdmin")}</SelectItem>
+                        )}
                         <SelectItem value="tenant_admin">{t("users.tenantAdmin")}</SelectItem>
                         <SelectItem value="tenant_user">{t("users.tenantUser")}</SelectItem>
                       </SelectContent>

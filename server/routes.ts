@@ -5,6 +5,9 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import speakeasy from "speakeasy";
 import session from "express-session";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import {
   loginSchema, registerSchema, resetPasswordSchema, verifyTotpSchema, tenantSetupSchema,
   insertProductSchema, insertTemplateSchema, insertCampaignSchema,
@@ -12,6 +15,35 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { generateActivationToken, getActivationTokenExpiry, sendActivationEmail } from "./email";
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const fileStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueSuffix}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage: fileStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
 
 const JWT_SECRET = process.env.SESSION_SECRET || "your-secret-key";
 
@@ -115,6 +147,16 @@ export async function registerRoutes(
     saveUninitialized: false,
     cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
   }));
+
+  app.use("/uploads", (await import("express")).default.static(uploadsDir));
+
+  app.post("/api/upload", authenticate, upload.single("file"), (req: AuthRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: fileUrl });
+  });
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
@@ -1143,13 +1185,68 @@ export async function registerRoutes(
         const activeCampaigns = campaigns.filter(c => c.status === "active").length;
         const draftCampaigns = campaigns.filter(c => c.status === "draft").length;
 
+        // Generate monthly campaign data for the last 6 months
+        const now = new Date();
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const campaignChartData = [];
+        for (let i = 5; i >= 0; i--) {
+          const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+          const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+          const count = campaigns.filter(c => {
+            const createdAt = new Date(c.createdAt);
+            return createdAt >= monthStart && createdAt <= monthEnd;
+          }).length;
+          campaignChartData.push({
+            month: monthNames[date.getMonth()],
+            campaigns: count
+          });
+        }
+
+        // Generate product category breakdown
+        const categoryMap = new Map<string, number>();
+        products.forEach(p => {
+          const category = p.category || "Uncategorized";
+          categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+        });
+        const productCategoryData = Array.from(categoryMap.entries())
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 4);
+
+        // Generate recent activity from campaigns
+        const recentActivity = campaigns
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 5)
+          .map(c => {
+            const createdAt = new Date(c.createdAt);
+            const diffMs = now.getTime() - createdAt.getTime();
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            let timeAgo = "";
+            if (diffHours < 1) timeAgo = "Just now";
+            else if (diffHours < 24) timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            else timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+            
+            return {
+              id: c.id,
+              action: c.status === "active" ? "Published campaign" : c.status === "draft" ? "Created campaign" : "Updated campaign",
+              item: c.name,
+              time: timeAgo,
+              type: "campaign"
+            };
+          });
+
         res.json({
           totalProducts: products.length,
           totalCampaigns: campaigns.length,
           activeCampaigns,
           draftCampaigns,
           totalTemplates: templates.length,
-          recentCampaigns: campaigns.slice(0, 5)
+          recentCampaigns: campaigns.slice(0, 5),
+          campaignChartData,
+          productCategoryData,
+          recentActivity
         });
       }
     } catch (error) {

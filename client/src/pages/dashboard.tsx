@@ -3,7 +3,6 @@ import { Link } from "wouter";
 import { BarChart3, Package, FileText, Megaphone, Plus, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -14,83 +13,68 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
 } from "recharts";
 
-const campaignData = [
-  { month: "Jan", campaigns: 4 },
-  { month: "Feb", campaigns: 6 },
-  { month: "Mar", campaigns: 8 },
-  { month: "Apr", campaigns: 12 },
-  { month: "May", campaigns: 15 },
-  { month: "Jun", campaigns: 18 },
-];
-
-const productUsageData = [
-  { name: "Electronics", value: 35 },
-  { name: "Clothing", value: 28 },
-  { name: "Food", value: 20 },
-  { name: "Home", value: 17 },
-];
-
 const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))"];
+
+interface DashboardStats {
+  totalCampaigns: number;
+  activeCampaigns: number;
+  totalProducts: number;
+  totalTemplates: number;
+  draftCampaigns: number;
+  campaignChartData: Array<{ month: string; campaigns: number }>;
+  productCategoryData: Array<{ name: string; value: number }>;
+  recentActivity: Array<{ id: string; action: string; item: string; time: string; type: string }>;
+}
 
 export default function DashboardPage() {
   const { t } = useTranslation();
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
   });
 
   const statsCards = [
     {
       title: t("dashboard.totalCampaigns"),
-      value: stats?.totalCampaigns ?? 24,
-      change: "+12%",
-      trend: "up",
+      value: stats?.totalCampaigns ?? 0,
       icon: Megaphone,
       color: "text-chart-1",
       bgColor: "bg-chart-1/10",
     },
     {
       title: t("dashboard.activeCampaigns"),
-      value: stats?.activeCampaigns ?? 8,
-      change: "+5%",
-      trend: "up",
+      value: stats?.activeCampaigns ?? 0,
       icon: BarChart3,
       color: "text-chart-2",
       bgColor: "bg-chart-2/10",
     },
     {
       title: t("dashboard.totalProducts"),
-      value: stats?.totalProducts ?? 156,
-      change: "+23",
-      trend: "up",
+      value: stats?.totalProducts ?? 0,
       icon: Package,
       color: "text-chart-3",
       bgColor: "bg-chart-3/10",
     },
     {
       title: t("dashboard.totalTemplates"),
-      value: stats?.totalTemplates ?? 42,
-      change: "-2%",
-      trend: "down",
+      value: stats?.totalTemplates ?? 0,
       icon: FileText,
       color: "text-chart-4",
       bgColor: "bg-chart-4/10",
     },
   ];
 
-  const recentActivity = [
-    { id: 1, action: "Created campaign", item: "Summer Sale 2024", time: "2 hours ago", type: "campaign" },
-    { id: 2, action: "Added product", item: "Premium Headphones", time: "5 hours ago", type: "product" },
-    { id: 3, action: "Updated template", item: "Modern Catalog", time: "1 day ago", type: "template" },
-    { id: 4, action: "Published campaign", item: "Holiday Special", time: "2 days ago", type: "campaign" },
-  ];
+  const campaignChartData = stats?.campaignChartData ?? [];
+  const productCategoryData = stats?.productCategoryData ?? [];
+  const recentActivity = stats?.recentActivity ?? [];
+
+  const hasChartData = campaignChartData.some(d => d.campaigns > 0);
+  const hasCategoryData = productCategoryData.length > 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -125,19 +109,7 @@ export default function DashboardPage() {
                 <Skeleton className="h-8 w-20" />
               ) : (
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold">{stat.value}</span>
-                  <span
-                    className={`text-sm flex items-center ${
-                      stat.trend === "up" ? "text-green-600" : "text-red-500"
-                    }`}
-                  >
-                    {stat.trend === "up" ? (
-                      <TrendingUp className="h-3 w-3 mr-1" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3 mr-1" />
-                    )}
-                    {stat.change}
-                  </span>
+                  <span className="text-3xl font-bold" data-testid={`stat-value-${index}`}>{stat.value}</span>
                 </div>
               )}
             </CardContent>
@@ -153,27 +125,41 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={campaignData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="month" className="text-xs" />
-                  <YAxis className="text-xs" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="campaigns"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ fill: "hsl(var(--primary))" }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Skeleton className="h-full w-full" />
+                </div>
+              ) : hasChartData ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={campaignChartData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="month" className="text-xs" />
+                    <YAxis className="text-xs" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="campaigns"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={{ fill: "hsl(var(--primary))" }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <Megaphone className="h-12 w-12 mb-4 opacity-50" />
+                  <p className="text-sm">No campaigns created yet</p>
+                  <Button variant="outline" size="sm" className="mt-4" asChild>
+                    <Link href="/campaigns/new">Create your first campaign</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -181,46 +167,60 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>{t("dashboard.productUsage")}</CardTitle>
-            <CardDescription>Product categories used in campaigns</CardDescription>
+            <CardDescription>Product categories in your catalog</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={productUsageData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {productUsageData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap justify-center gap-4 mt-4">
-              {productUsageData.map((item, index) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: COLORS[index] }}
-                  />
-                  <span className="text-sm text-muted-foreground">{item.name}</span>
+              {isLoading ? (
+                <Skeleton className="h-full w-full" />
+              ) : hasCategoryData ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={productCategoryData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {productCategoryData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "8px",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-muted-foreground">
+                  <Package className="h-12 w-12 mb-4 opacity-50" />
+                  <p className="text-sm">No products added yet</p>
+                  <Button variant="outline" size="sm" className="mt-4" asChild>
+                    <Link href="/products/new">Add your first product</Link>
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
+            {hasCategoryData && (
+              <div className="flex flex-wrap justify-center gap-4 mt-4">
+                {productCategoryData.map((item, index) => (
+                  <div key={item.name} className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    />
+                    <span className="text-sm text-muted-foreground">{item.name} ({item.value})</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -240,27 +240,42 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentActivity.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-center justify-between py-3 border-b last:border-0"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 rounded-md bg-muted">
-                      {activity.type === "campaign" && <Megaphone className="h-4 w-4" />}
-                      {activity.type === "product" && <Package className="h-4 w-4" />}
-                      {activity.type === "template" && <FileText className="h-4 w-4" />}
+            {isLoading ? (
+              <div className="space-y-4">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : recentActivity.length > 0 ? (
+              <div className="space-y-4">
+                {recentActivity.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className="flex items-center justify-between py-3 border-b last:border-0"
+                    data-testid={`activity-item-${activity.id}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 rounded-md bg-muted">
+                        {activity.type === "campaign" && <Megaphone className="h-4 w-4" />}
+                        {activity.type === "product" && <Package className="h-4 w-4" />}
+                        {activity.type === "template" && <FileText className="h-4 w-4" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{activity.action}</p>
+                        <p className="text-sm text-muted-foreground">{activity.item}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">{activity.action}</p>
-                      <p className="text-sm text-muted-foreground">{activity.item}</p>
-                    </div>
+                    <span className="text-xs text-muted-foreground">{activity.time}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{activity.time}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <Megaphone className="h-12 w-12 mb-4 opacity-50" />
+                <p className="text-sm">No recent activity</p>
+                <p className="text-xs mt-1">Start by creating a campaign</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

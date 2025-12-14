@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, Filter, MoreHorizontal, Pencil, Trash2, Package, Grid, List } from "lucide-react";
+import { Plus, Search, Filter, MoreHorizontal, Pencil, Trash2, Package, Grid, List, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +39,41 @@ export default function ProductsPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Upload failed");
+      const data = await response.json();
+      form.setValue("imageUrl", data.url);
+      setUploadPreview(data.url);
+      toast({ title: t("common.success"), description: "Image uploaded successfully" });
+    } catch (error) {
+      toast({ variant: "destructive", title: t("common.error"), description: "Failed to upload image" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const clearUploadPreview = () => {
+    setUploadPreview(null);
+    form.setValue("imageUrl", "");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const { data: products, isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -255,10 +290,59 @@ export default function ProductsPage() {
                   name="imageUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("products.image")} URL</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-product-image" />
-                      </FormControl>
+                      <FormLabel>{t("products.image")}</FormLabel>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileUpload}
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            className="hidden"
+                            data-testid="input-product-image-file"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                            className="flex-1"
+                            data-testid="button-upload-image"
+                          >
+                            <Upload className="mr-2 h-4 w-4" />
+                            {isUploading ? "Uploading..." : "Upload Image"}
+                          </Button>
+                        </div>
+                        {(uploadPreview || field.value) && (
+                          <div className="relative w-20 h-20 rounded-md overflow-hidden border">
+                            <img
+                              src={uploadPreview || field.value}
+                              alt="Preview"
+                              className="w-full h-full object-cover"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-1 right-1 h-5 w-5"
+                              onClick={clearUploadPreview}
+                              data-testid="button-clear-image"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span>or enter URL:</span>
+                        </div>
+                        <FormControl>
+                          <Input 
+                            {...field} 
+                            placeholder="https://example.com/image.jpg"
+                            data-testid="input-product-image" 
+                          />
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
