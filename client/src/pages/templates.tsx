@@ -1,67 +1,28 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
 import { Plus, Search, MoreHorizontal, Pencil, Trash2, FileText, Eye, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Template } from "@shared/schema";
 
-const templateSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  type: z.enum(["single_page", "multi_page"]),
-  fontFamily: z.string().optional(),
-  textColor: z.string().optional(),
-  backgroundColor: z.string().optional(),
-});
-
-type TemplateFormValues = z.infer<typeof templateSchema>;
-
 export default function TemplatesPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
 
   const { data: templates, isLoading } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
-  });
-
-  const form = useForm<TemplateFormValues>({
-    resolver: zodResolver(templateSchema),
-    defaultValues: {
-      title: "",
-      type: "single_page",
-      fontFamily: "Inter",
-      textColor: "#000000",
-      backgroundColor: "#ffffff",
-    },
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: TemplateFormValues) => {
-      return apiRequest("POST", "/api/templates", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
-      setIsDialogOpen(false);
-      form.reset();
-      toast({ title: t("common.success"), description: "Template created successfully" });
-    },
   });
 
   const deleteMutation = useMutation({
@@ -73,10 +34,6 @@ export default function TemplatesPage() {
       toast({ title: t("common.success"), description: "Template deleted successfully" });
     },
   });
-
-  const onSubmit = (data: TemplateFormValues) => {
-    createMutation.mutate(data);
-  };
 
   const filteredTemplates = templates?.filter((t) => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
@@ -91,121 +48,10 @@ export default function TemplatesPage() {
           <h1 className="text-3xl font-semibold">{t("templates.title")}</h1>
           <p className="text-muted-foreground">Manage your brochure templates</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-template">
-              <Plus className="mr-2 h-4 w-4" />
-              {t("templates.addTemplate")}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{t("templates.addTemplate")}</DialogTitle>
-              <DialogDescription>Create a new brochure template</DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("templates.templateName")}</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-template-title" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("templates.templateType")}</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-template-type">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="single_page">{t("templates.singlePage")}</SelectItem>
-                          <SelectItem value="multi_page">{t("templates.multiPage")}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="textColor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("templates.textColor")}</FormLabel>
-                        <FormControl>
-                          <div className="flex gap-2">
-                            <Input type="color" {...field} className="w-12 h-9 p-1" />
-                            <Input {...field} className="flex-1" data-testid="input-text-color" />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="backgroundColor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("templates.backgroundColor")}</FormLabel>
-                        <FormControl>
-                          <div className="flex gap-2">
-                            <Input type="color" {...field} className="w-12 h-9 p-1" />
-                            <Input {...field} className="flex-1" data-testid="input-bg-color" />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="fontFamily"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("templates.font")}</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-font">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="Inter">Inter</SelectItem>
-                          <SelectItem value="Roboto">Roboto</SelectItem>
-                          <SelectItem value="Open Sans">Open Sans</SelectItem>
-                          <SelectItem value="Montserrat">Montserrat</SelectItem>
-                          <SelectItem value="Poppins">Poppins</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type="submit" disabled={createMutation.isPending} data-testid="button-save-template">
-                    {t("common.create")}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setLocation("/templates/new")} data-testid="button-add-template">
+          <Plus className="mr-2 h-4 w-4" />
+          {t("templates.addTemplate")}
+        </Button>
       </div>
 
       <Tabs defaultValue="all" className="space-y-4">
@@ -254,7 +100,7 @@ export default function TemplatesPage() {
                 <p className="text-muted-foreground text-center mb-4">
                   Create your first template to get started
                 </p>
-                <Button onClick={() => setIsDialogOpen(true)}>
+                <Button onClick={() => setLocation("/templates/new")}>
                   <Plus className="mr-2 h-4 w-4" />
                   {t("templates.addTemplate")}
                 </Button>
@@ -298,11 +144,11 @@ export default function TemplatesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setLocation(`/templates/${template.id}/edit`)}>
                             <Eye className="mr-2 h-4 w-4" />
                             {t("templates.preview")}
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setLocation(`/templates/${template.id}/edit`)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             {t("common.edit")}
                           </DropdownMenuItem>

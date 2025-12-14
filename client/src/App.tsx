@@ -25,6 +25,7 @@ import ProductsPage from "@/pages/products";
 import TemplatesPage from "@/pages/templates";
 import CampaignsPage from "@/pages/campaigns";
 import CampaignEditorPage from "@/pages/campaign-editor";
+import TemplateEditorPage from "@/pages/template-editor";
 import MessagesPage from "@/pages/messages";
 import SuggestionsPage from "@/pages/suggestions";
 import TutorialsPage from "@/pages/tutorials";
@@ -96,6 +97,8 @@ function ProtectedRoutes() {
       <Route path="/dashboard" component={() => <ProtectedRoute component={DashboardPage} />} />
       <Route path="/products" component={() => <ProtectedRoute component={ProductsPage} />} />
       <Route path="/templates" component={() => <ProtectedRoute component={TemplatesPage} />} />
+      <Route path="/templates/new" component={() => <ProtectedRoute component={TemplateEditorPage} />} />
+      <Route path="/templates/:id/edit" component={() => <ProtectedRoute component={TemplateEditorPage} />} />
       <Route path="/campaigns" component={() => <ProtectedRoute component={CampaignsPage} />} />
       <Route path="/campaigns/new" component={() => <ProtectedRoute component={CampaignEditorPage} />} />
       <Route path="/campaigns/:id/edit" component={() => <ProtectedRoute component={CampaignEditorPage} />} />

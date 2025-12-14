@@ -33,3 +33,15 @@
     - Enhanced Properties Panel: Element-specific options for text formatting, shape styling
     - Color Palette: Preset colors and custom color picker for all tools
     - Added translations for English and Turkish
+[x] 28. Environment migration - npm install and db:push completed (December 14, 2025)
+[x] 29. Template Canvas Editor feature added (December 14, 2025):
+    - Created template-editor.tsx with full canvas design tools
+    - Tools: Select, Text, Shape (rectangle, circle, triangle, line), Draw (freehand)
+    - Header/Footer zones with adjustable heights
+    - Properties panel for text formatting (font, size, bold/italic/underline, alignment, colors)
+    - Shape styling (fill, stroke, stroke width)
+    - Element positioning, sizing, rotation, opacity controls
+    - Color palette with preset colors
+    - Canvas size options (square, portrait, landscape, A4)
+    - Updated templates.tsx to navigate to editor instead of dialog
+    - Added routes in App.tsx for /templates/new and /templates/:id/edit
