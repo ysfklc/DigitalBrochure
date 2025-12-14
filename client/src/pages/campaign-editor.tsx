@@ -112,7 +112,7 @@ export default function CampaignEditorPage() {
   const [tempCampaignName, setTempCampaignName] = useState("");
 
   const { data: campaign, isLoading: loadingCampaign } = useQuery<Campaign>({
-    queryKey: ["/api/campaigns", id],
+    queryKey: [`/api/campaigns/${id}`],
     enabled: !!id && id !== "new",
   });
 
@@ -209,7 +209,8 @@ export default function CampaignEditorPage() {
   });
 
   const handleSave = () => {
-    if (!campaignName && !savedCampaignId && id === "new") {
+    // Always prompt for name if not set
+    if (!campaignName.trim()) {
       setTempCampaignName("");
       setShowSaveDialog(true);
       return;

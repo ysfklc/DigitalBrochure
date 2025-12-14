@@ -35,3 +35,19 @@
     - Added save dialog that prompts for campaign name before saving new campaigns
     - Canvas data now properly serializes all element properties (position, size, rotation, opacity, type, data, page)
     - Added translations for save dialog in English, Turkish, and German
+[x] 21. Environment re-migration (December 14, 2025):
+    - Ran npm install to restore dependencies (tsx was not found)
+    - Pushed database schema with db:push (users table was missing)
+    - Super admin user created successfully
+    - Application running on port 5000
+    - All previous items verified complete
+[x] 22. Fixed campaign name saving issue (December 14, 2025):
+    - Bug: Campaign name was saved as empty string because dialog only showed for id === "new"
+    - Fix: Changed handleSave to always show name dialog when campaignName is empty (!campaignName.trim())
+    - Canvas data confirmed working correctly - all elements with positions, sizes, and data are being saved
+    - Verified in logs: canvasData contains elements array with x, y, width, height, rotation, opacity, data, page
+[x] 23. Fixed campaign loading issue (December 14, 2025):
+    - Bug: Query used queryKey: ["/api/campaigns", id] but default fetcher only uses queryKey[0] as URL
+    - Result: Fetched from /api/campaigns (list) instead of /api/campaigns/${id} (individual)
+    - Fix: Changed queryKey to [`/api/campaigns/${id}`] so correct campaign with canvasData is loaded
+    - Products and canvas design should now be restored when editing an existing campaign
