@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { 
   Send, 
   Inbox, 
@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Message, User as UserType } from "@shared/schema";
 
 interface MessageWithUser extends Message {
@@ -43,6 +45,7 @@ interface MessageWithUser extends Message {
 
 export default function MessagesPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"inbox" | "sent">("inbox");
   const [selectedMessage, setSelectedMessage] = useState<MessageWithUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,10 +58,35 @@ export default function MessagesPage() {
 
   const { data: messages, isLoading: loadingMessages } = useQuery<MessageWithUser[]>({
     queryKey: ["/api/messages", activeTab],
+    queryFn: async () => {
+      const response = await fetch(`/api/messages?type=${activeTab}`, {
+        credentials: "include",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      if (!response.ok) throw new Error("Failed to fetch messages");
+      return response.json();
+    }
   });
 
-  const { data: users } = useQuery<UserType[]>({
-    queryKey: ["/api/users"],
+  const { data: recipients } = useQuery<UserType[]>({
+    queryKey: ["/api/messages/recipients"],
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async (data: { receiverId: string; subject: string; content: string }) => {
+      return apiRequest("POST", "/api/messages", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+      toast({ title: t("messages.messageSent") });
+      setComposeDialogOpen(false);
+      setNewMessage({ recipientId: "", subject: "", content: "" });
+    },
+    onError: () => {
+      toast({ title: t("messages.sendFailed"), variant: "destructive" });
+    }
   });
 
   const filteredMessages = messages?.filter((message) => {
@@ -87,8 +115,15 @@ export default function MessagesPage() {
   };
 
   const handleSendMessage = () => {
-    setComposeDialogOpen(false);
-    setNewMessage({ recipientId: "", subject: "", content: "" });
+    if (!newMessage.recipientId || !newMessage.content) {
+      toast({ title: t("messages.fillRequired"), variant: "destructive" });
+      return;
+    }
+    sendMessageMutation.mutate({
+      receiverId: newMessage.recipientId,
+      subject: newMessage.subject,
+      content: newMessage.content
+    });
   };
 
   return (
@@ -288,11 +323,11 @@ export default function MessagesPage() {
                   <SelectValue placeholder={t("messages.selectRecipient")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {users?.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
+                  {recipients?.map((recipient) => (
+                    <SelectItem key={recipient.id} value={recipient.id}>
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4" />
-                        {user.firstName} {user.lastName}
+                        {recipient.firstName} {recipient.lastName}
                       </div>
                     </SelectItem>
                   ))}

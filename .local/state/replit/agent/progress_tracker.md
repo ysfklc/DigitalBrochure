@@ -59,3 +59,15 @@
     - Added copiedElement state to store copied element data
     - Added keyboard event listener with proper input field detection
     - Added i18n translations for elementCopied and elementPasted (EN/TR)
+[x] 33. Environment migration completed (December 14, 2025):
+    - npm install executed successfully
+    - Workflow configured with webview output on port 5000
+    - Application running successfully - Express server serving on port 5000
+    - Super admin user created successfully
+[x] 34. Fixed Messages section (December 14, 2025):
+    - Updated storage interface with getInboxMessages, getSentMessages, getMessageRecipients, getSuperAdminUsers
+    - Added /api/messages/recipients endpoint for proper recipient filtering
+    - Tenant Admin can now only message: users in their own tenant + SuperAdmins (excluding themselves)
+    - Fixed /api/messages to properly return inbox vs sent messages with sender/receiver info
+    - Fixed frontend to use recipients endpoint and actually call API to send messages
+    - Added i18n translations for messageSent, sendFailed, fillRequired (EN/TR)

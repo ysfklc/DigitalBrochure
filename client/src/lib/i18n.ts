@@ -256,6 +256,9 @@ const resources = {
         noMessages: "No messages found",
         newMessage: "New Message",
         selectRecipient: "Select recipient",
+        messageSent: "Message sent successfully",
+        sendFailed: "Failed to send message",
+        fillRequired: "Please fill in recipient and message",
       },
       suggestions: {
         title: "Suggestions",
@@ -752,6 +755,9 @@ const resources = {
         noMessages: "Mesaj bulunamadi",
         newMessage: "Yeni Mesaj",
         selectRecipient: "Alici sec",
+        messageSent: "Mesaj basariyla gonderildi",
+        sendFailed: "Mesaj gonderilemedi",
+        fillRequired: "Lutfen alici ve mesaj alanlarini doldurun",
       },
       suggestions: {
         title: "Oneriler",

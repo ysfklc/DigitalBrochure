@@ -996,21 +996,67 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/messages", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+  app.get("/api/messages", authenticate, async (req: AuthRequest, res: Response) => {
     try {
-      const messages = await storage.getMessagesByTenant(req.user!.tenantId!);
-      res.json(messages);
+      const { type } = req.query;
+      const userId = req.user!.id;
+      
+      let messageList: any[] = [];
+      if (type === "sent") {
+        messageList = await storage.getSentMessages(userId);
+      } else {
+        messageList = await storage.getInboxMessages(userId);
+      }
+      
+      const messagesWithUsers = await Promise.all(messageList.map(async (msg: any) => {
+        const sender = await storage.getUser(msg.senderId);
+        const receiver = await storage.getUser(msg.receiverId);
+        return {
+          ...msg,
+          sender: sender ? { id: sender.id, firstName: sender.firstName, lastName: sender.lastName, email: sender.email } : null,
+          receiver: receiver ? { id: receiver.id, firstName: receiver.firstName, lastName: receiver.lastName, email: receiver.email } : null
+        };
+      }));
+      
+      res.json(messagesWithUsers);
     } catch (error) {
       res.status(500).json({ error: "Failed to get messages" });
     }
   });
 
-  app.post("/api/messages", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+  app.get("/api/messages/recipients", authenticate, async (req: AuthRequest, res: Response) => {
     try {
+      const userId = req.user!.id;
+      const tenantId = req.user!.tenantId;
+      const role = req.user!.role;
+      
+      const recipients = await storage.getMessageRecipients(userId, tenantId, role);
+      const safeRecipients = recipients.map(({ password, totpSecret, ...u }) => u);
+      res.json(safeRecipients);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get message recipients" });
+    }
+  });
+
+  app.post("/api/messages", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { receiverId, subject, content } = req.body;
+      
+      if (!receiverId || !content) {
+        return res.status(400).json({ error: "Receiver and content are required" });
+      }
+      
+      const receiver = await storage.getUser(receiverId);
+      if (!receiver) {
+        return res.status(400).json({ error: "Invalid recipient" });
+      }
+      
       const data = insertMessageSchema.parse({
-        ...req.body,
         tenantId: req.user!.tenantId,
-        senderId: req.user!.id
+        senderId: req.user!.id,
+        receiverId,
+        subject: subject || null,
+        content
       });
       const message = await storage.createMessage(data);
       res.json(message);

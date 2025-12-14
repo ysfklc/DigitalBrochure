@@ -1,4 +1,4 @@
-import { eq, and, or, desc, ilike } from "drizzle-orm";
+import { eq, and, or, desc, ilike, ne, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, products, templates,
@@ -59,6 +59,10 @@ export interface IStorage {
   getMessage(id: string): Promise<Message | undefined>;
   getMessagesByUser(userId: string): Promise<Message[]>;
   getMessagesByTenant(tenantId: string): Promise<Message[]>;
+  getInboxMessages(userId: string): Promise<Message[]>;
+  getSentMessages(userId: string): Promise<Message[]>;
+  getMessageRecipients(userId: string, tenantId: string | null, role: string): Promise<User[]>;
+  getSuperAdminUsers(): Promise<User[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageRead(id: string): Promise<Message | undefined>;
   deleteMessage(id: string): Promise<boolean>;
@@ -299,6 +303,49 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(messages)
       .where(eq(messages.tenantId, tenantId))
       .orderBy(desc(messages.createdAt));
+  }
+
+  async getInboxMessages(userId: string): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(eq(messages.receiverId, userId))
+      .orderBy(desc(messages.createdAt));
+  }
+
+  async getSentMessages(userId: string): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(eq(messages.senderId, userId))
+      .orderBy(desc(messages.createdAt));
+  }
+
+  async getSuperAdminUsers(): Promise<User[]> {
+    return db.select().from(users).where(eq(users.role, "super_admin"));
+  }
+
+  async getMessageRecipients(userId: string, tenantId: string | null, role: string): Promise<User[]> {
+    if (role === "super_admin") {
+      return db.select().from(users).where(
+        and(
+          eq(users.isActive, true),
+          ne(users.id, userId)
+        )
+      );
+    }
+    
+    if (!tenantId) {
+      return [];
+    }
+    
+    const tenantUsers = await db.select().from(users).where(
+      and(
+        eq(users.tenantId, tenantId),
+        eq(users.isActive, true)
+      )
+    );
+    
+    const superAdmins = await this.getSuperAdminUsers();
+    
+    const allRecipients = [...tenantUsers, ...superAdmins];
+    return allRecipients.filter(u => u.id !== userId);
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
