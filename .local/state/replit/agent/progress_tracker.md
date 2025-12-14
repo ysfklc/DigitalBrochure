@@ -17,3 +17,11 @@
     - Added amber impersonation banner with "Switch Back" button in header
     - Added i18n translations for English and Turkish
 [x] 14. Migration to Replit environment completed - application verified running successfully
+[x] 15. All items verified complete - import finalized
+[x] 16. Fixed canvas drag-drop functionality:
+    - Added CanvasElement interface for tracking dropped elements
+    - Updated handleDrop to calculate drop position and create canvas elements
+    - Products now render on canvas with proper positioning and selection
+    - Properties panel now shows actual element data and allows editing (position, size, rotation, opacity)
+    - Added layers panel showing all elements on current page
+    - Added delete element functionality

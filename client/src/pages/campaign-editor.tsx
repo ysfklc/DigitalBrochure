@@ -46,6 +46,19 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type { Campaign, Product, Template } from "@shared/schema";
 
+interface CanvasElement {
+  id: string;
+  type: 'product' | 'text' | 'shape' | 'image';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  opacity: number;
+  data: any;
+  page: number;
+}
+
 export default function CampaignEditorPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -59,6 +72,13 @@ export default function CampaignEditorPage() {
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [leftPanelTab, setLeftPanelTab] = useState("products");
   const [searchQuery, setSearchQuery] = useState("");
+  const [canvasElements, setCanvasElements] = useState<CanvasElement[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isMovingElement, setIsMovingElement] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0, elementX: 0, elementY: 0 });
 
   const { data: campaign, isLoading: loadingCampaign } = useQuery<Campaign>({
     queryKey: ["/api/campaigns", id],
@@ -138,15 +158,37 @@ export default function CampaignEditorPage() {
 
   const handleDragStart = (e: React.DragEvent, product: Product) => {
     e.dataTransfer.setData("product", JSON.stringify(product));
+    e.dataTransfer.effectAllowed = "copy";
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragging(false);
     const productData = e.dataTransfer.getData("product");
-    if (productData) {
+    if (productData && canvasRef.current) {
       const product = JSON.parse(productData);
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / (zoom / 100);
+      const y = (e.clientY - rect.top) / (zoom / 100);
+      
+      const newElement: CanvasElement = {
+        id: `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: 'product',
+        x: Math.max(0, x - 60),
+        y: Math.max(0, y - 60),
+        width: 120,
+        height: 140,
+        rotation: 0,
+        opacity: 100,
+        data: product,
+        page: currentPage,
+      };
+      
+      setCanvasElements((prev) => [...prev, newElement]);
+      setSelectedElement(newElement.id);
+      
       toast({
-        title: "Product Added",
+        title: t("common.success"),
         description: `${product.name} added to canvas`,
       });
     }
@@ -154,7 +196,159 @@ export default function CampaignEditorPage() {
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setIsDragging(true);
   };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleElementMouseDown = (elementId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelectedElement(elementId);
+    setIsMovingElement(true);
+    
+    const element = canvasElements.find((el) => el.id === elementId);
+    if (element && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left) / (zoom / 100);
+      const mouseY = (e.clientY - rect.top) / (zoom / 100);
+      setDragOffset({
+        x: mouseX - element.x,
+        y: mouseY - element.y,
+      });
+    }
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (isResizing) {
+      handleResizeMouseMove(e);
+      return;
+    }
+    
+    if (!isMovingElement || !selectedElement || !canvasRef.current) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / (zoom / 100);
+    const mouseY = (e.clientY - rect.top) / (zoom / 100);
+    
+    const newX = Math.max(0, mouseX - dragOffset.x);
+    const newY = Math.max(0, mouseY - dragOffset.y);
+    
+    setCanvasElements((prev) =>
+      prev.map((el) =>
+        el.id === selectedElement ? { ...el, x: newX, y: newY } : el
+      )
+    );
+  };
+
+  const handleCanvasMouseUp = () => {
+    setIsMovingElement(false);
+    setIsResizing(false);
+    setResizeHandle(null);
+  };
+
+  const handleCanvasMouseLeave = () => {
+    setIsMovingElement(false);
+    setIsResizing(false);
+    setResizeHandle(null);
+  };
+
+  const handleResizeMouseDown = (handle: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!selectedElement || !canvasRef.current) return;
+    
+    const element = canvasElements.find((el) => el.id === selectedElement);
+    if (!element) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / (zoom / 100);
+    const mouseY = (e.clientY - rect.top) / (zoom / 100);
+    
+    setIsResizing(true);
+    setResizeHandle(handle);
+    setResizeStart({
+      x: mouseX,
+      y: mouseY,
+      width: element.width,
+      height: element.height,
+      elementX: element.x,
+      elementY: element.y,
+    });
+  };
+
+  const handleResizeMouseMove = (e: React.MouseEvent) => {
+    if (!isResizing || !selectedElement || !canvasRef.current || !resizeHandle) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / (zoom / 100);
+    const mouseY = (e.clientY - rect.top) / (zoom / 100);
+    
+    const deltaX = mouseX - resizeStart.x;
+    const deltaY = mouseY - resizeStart.y;
+    
+    let newWidth = resizeStart.width;
+    let newHeight = resizeStart.height;
+    let newX = resizeStart.elementX;
+    let newY = resizeStart.elementY;
+    
+    const minSize = 40;
+    
+    if (resizeHandle.includes('e')) {
+      newWidth = Math.max(minSize, resizeStart.width + deltaX);
+    }
+    if (resizeHandle.includes('w')) {
+      const widthDelta = Math.min(deltaX, resizeStart.width - minSize);
+      newWidth = resizeStart.width - widthDelta;
+      newX = resizeStart.elementX + widthDelta;
+    }
+    if (resizeHandle.includes('s')) {
+      newHeight = Math.max(minSize, resizeStart.height + deltaY);
+    }
+    if (resizeHandle.includes('n')) {
+      const heightDelta = Math.min(deltaY, resizeStart.height - minSize);
+      newHeight = resizeStart.height - heightDelta;
+      newY = resizeStart.elementY + heightDelta;
+    }
+    
+    setCanvasElements((prev) =>
+      prev.map((el) =>
+        el.id === selectedElement
+          ? { ...el, width: newWidth, height: newHeight, x: newX, y: newY }
+          : el
+      )
+    );
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    if (!isMovingElement) {
+      setSelectedElement(null);
+    }
+  };
+
+  const handleDeleteElement = () => {
+    if (selectedElement) {
+      setCanvasElements((prev) => prev.filter((el) => el.id !== selectedElement));
+      setSelectedElement(null);
+    }
+  };
+
+  const updateElementProperty = (property: keyof CanvasElement, value: number) => {
+    if (selectedElement) {
+      setCanvasElements((prev) =>
+        prev.map((el) =>
+          el.id === selectedElement ? { ...el, [property]: value } : el
+        )
+      );
+    }
+  };
+
+  const currentPageElements = canvasElements.filter((el) => el.page === currentPage);
+  const selectedElementData = canvasElements.find((el) => el.id === selectedElement);
 
   if (loadingCampaign && id !== "new") {
     return (
@@ -370,7 +564,7 @@ export default function CampaignEditorPage() {
         <div className="flex-1 bg-muted/50 overflow-auto flex items-center justify-center p-8">
           <div
             ref={canvasRef}
-            className="bg-white shadow-lg rounded-lg relative"
+            className={`bg-white shadow-lg rounded-lg relative ${isDragging ? 'ring-2 ring-primary ring-offset-2' : ''} ${isMovingElement ? 'cursor-grabbing' : ''}`}
             style={{
               width: `${(595 * zoom) / 100}px`,
               height: `${(842 * zoom) / 100}px`,
@@ -378,35 +572,141 @@ export default function CampaignEditorPage() {
             }}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handleCanvasClick}
+            onMouseMove={handleCanvasMouseMove}
+            onMouseUp={handleCanvasMouseUp}
+            onMouseLeave={handleCanvasMouseLeave}
             data-testid="canvas"
           >
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <Move className="h-12 w-12 mx-auto mb-4" />
-                <p className="text-lg">Drag products here to add them</p>
-                <p className="text-sm mt-2">Page {currentPage} of {totalPages}</p>
+            {currentPageElements.length === 0 ? (
+              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground pointer-events-none">
+                <div className="text-center">
+                  <Move className="h-12 w-12 mx-auto mb-4" />
+                  <p className="text-lg">Drag products here to add them</p>
+                  <p className="text-sm mt-2">Page {currentPage} of {totalPages}</p>
+                </div>
               </div>
-            </div>
+            ) : null}
+            
+            {currentPageElements.map((element) => (
+              <div
+                key={element.id}
+                className={`absolute transition-shadow select-none ${
+                  selectedElement === element.id
+                    ? 'ring-2 ring-primary shadow-lg cursor-grab'
+                    : 'hover:ring-1 hover:ring-primary/50 cursor-pointer'
+                } ${isMovingElement && selectedElement === element.id ? 'cursor-grabbing' : ''}`}
+                style={{
+                  left: `${(element.x * zoom) / 100}px`,
+                  top: `${(element.y * zoom) / 100}px`,
+                  width: `${(element.width * zoom) / 100}px`,
+                  height: `${(element.height * zoom) / 100}px`,
+                  transform: `rotate(${element.rotation}deg)`,
+                  opacity: element.opacity / 100,
+                }}
+                onMouseDown={(e) => handleElementMouseDown(element.id, e)}
+                data-testid={`canvas-element-${element.id}`}
+              >
+                {element.type === 'product' && (
+                  <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col">
+                    <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
+                      {element.data.imageUrl ? (
+                        <img
+                          src={element.data.imageUrl}
+                          alt={element.data.name}
+                          className="w-full h-full object-cover"
+                          draggable={false}
+                        />
+                      ) : (
+                        <Package className="h-8 w-8 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="p-1 text-center bg-background">
+                      <p className="text-xs font-medium truncate">{element.data.name}</p>
+                      <p className="text-xs text-primary font-bold">
+                        ${element.data.discountPrice || element.data.price}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {selectedElement === element.id && (
+                  <>
+                    <div
+                      className="absolute w-3 h-3 bg-primary border-2 border-white rounded-sm cursor-nw-resize"
+                      style={{ top: -6, left: -6 }}
+                      onMouseDown={(e) => handleResizeMouseDown('nw', e)}
+                      data-testid="resize-nw"
+                    />
+                    <div
+                      className="absolute w-3 h-3 bg-primary border-2 border-white rounded-sm cursor-ne-resize"
+                      style={{ top: -6, right: -6 }}
+                      onMouseDown={(e) => handleResizeMouseDown('ne', e)}
+                      data-testid="resize-ne"
+                    />
+                    <div
+                      className="absolute w-3 h-3 bg-primary border-2 border-white rounded-sm cursor-sw-resize"
+                      style={{ bottom: -6, left: -6 }}
+                      onMouseDown={(e) => handleResizeMouseDown('sw', e)}
+                      data-testid="resize-sw"
+                    />
+                    <div
+                      className="absolute w-3 h-3 bg-primary border-2 border-white rounded-sm cursor-se-resize"
+                      style={{ bottom: -6, right: -6 }}
+                      onMouseDown={(e) => handleResizeMouseDown('se', e)}
+                      data-testid="resize-se"
+                    />
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="w-80 border-l bg-background overflow-auto">
-          <div className="p-4 border-b">
+          <div className="p-4 border-b flex items-center justify-between gap-2">
             <h2 className="font-medium">{t("editor.properties")}</h2>
+            {selectedElementData && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDeleteElement}
+                data-testid="button-delete-element"
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            )}
           </div>
           
-          {selectedElement ? (
+          {selectedElementData ? (
             <div className="p-4 space-y-4">
+              {selectedElementData.type === 'product' && (
+                <div className="p-2 bg-muted rounded-md">
+                  <p className="text-sm font-medium">{selectedElementData.data.name}</p>
+                  <p className="text-xs text-muted-foreground">${selectedElementData.data.price}</p>
+                </div>
+              )}
               <div>
                 <Label className="text-xs text-muted-foreground">{t("editor.position")}</Label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <div>
                     <Label className="text-xs">X</Label>
-                    <Input type="number" defaultValue={0} data-testid="input-position-x" />
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElementData.x)}
+                      onChange={(e) => updateElementProperty('x', Number(e.target.value))}
+                      data-testid="input-position-x"
+                    />
                   </div>
                   <div>
                     <Label className="text-xs">Y</Label>
-                    <Input type="number" defaultValue={0} data-testid="input-position-y" />
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElementData.y)}
+                      onChange={(e) => updateElementProperty('y', Number(e.target.value))}
+                      data-testid="input-position-y"
+                    />
                   </div>
                 </div>
               </div>
@@ -415,26 +715,48 @@ export default function CampaignEditorPage() {
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <div>
                     <Label className="text-xs">Width</Label>
-                    <Input type="number" defaultValue={100} data-testid="input-size-width" />
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElementData.width)}
+                      onChange={(e) => updateElementProperty('width', Number(e.target.value))}
+                      data-testid="input-size-width"
+                    />
                   </div>
                   <div>
                     <Label className="text-xs">Height</Label>
-                    <Input type="number" defaultValue={100} data-testid="input-size-height" />
+                    <Input
+                      type="number"
+                      value={Math.round(selectedElementData.height)}
+                      onChange={(e) => updateElementProperty('height', Number(e.target.value))}
+                      data-testid="input-size-height"
+                    />
                   </div>
                 </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">{t("editor.rotation")}</Label>
                 <div className="flex items-center gap-2 mt-1">
-                  <Slider defaultValue={[0]} max={360} step={1} data-testid="slider-rotation" />
-                  <span className="text-sm w-12">0deg</span>
+                  <Slider
+                    value={[selectedElementData.rotation]}
+                    onValueChange={(v) => updateElementProperty('rotation', v[0])}
+                    max={360}
+                    step={1}
+                    data-testid="slider-rotation"
+                  />
+                  <span className="text-sm w-12">{selectedElementData.rotation}°</span>
                 </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">{t("editor.opacity")}</Label>
                 <div className="flex items-center gap-2 mt-1">
-                  <Slider defaultValue={[100]} max={100} step={1} data-testid="slider-opacity" />
-                  <span className="text-sm w-12">100%</span>
+                  <Slider
+                    value={[selectedElementData.opacity]}
+                    onValueChange={(v) => updateElementProperty('opacity', v[0])}
+                    max={100}
+                    step={1}
+                    data-testid="slider-opacity"
+                  />
+                  <span className="text-sm w-12">{selectedElementData.opacity}%</span>
                 </div>
               </div>
             </div>
@@ -449,10 +771,30 @@ export default function CampaignEditorPage() {
 
           <div className="p-4">
             <h3 className="font-medium mb-3">{t("editor.layers")}</h3>
-            <div className="text-center text-muted-foreground py-4">
-              <Layers className="h-6 w-6 mx-auto mb-2" />
-              <p className="text-sm">No layers yet</p>
-            </div>
+            {currentPageElements.length > 0 ? (
+              <div className="space-y-1">
+                {currentPageElements.map((element, index) => (
+                  <div
+                    key={element.id}
+                    className={`flex items-center gap-2 p-2 rounded-md cursor-pointer hover-elevate ${
+                      selectedElement === element.id ? 'bg-primary/10' : ''
+                    }`}
+                    onClick={() => setSelectedElement(element.id)}
+                    data-testid={`layer-${element.id}`}
+                  >
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm flex-1 truncate">
+                      {element.type === 'product' ? element.data.name : `Element ${index + 1}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-4">
+                <Layers className="h-6 w-6 mx-auto mb-2" />
+                <p className="text-sm">No layers yet</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
