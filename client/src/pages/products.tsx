@@ -52,10 +52,12 @@ export default function ProductsPage() {
     formData.append("file", file);
 
     try {
+      const token = localStorage.getItem("authToken");
       const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
         credentials: "include",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Upload failed");
       const data = await response.json();

@@ -105,8 +105,8 @@ export default function TenantsPage() {
 
   const impersonateMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest("POST", `/api/admin/tenants/${id}/impersonate`) as Response;
-      return response.json();
+      const data = await apiRequest("POST", `/api/admin/tenants/${id}/impersonate`);
+      return data as { user: User; token: string; tenant: Tenant };
     },
     onSuccess: (data: { user: User; token: string; tenant: Tenant }) => {
       if (user && token) {
