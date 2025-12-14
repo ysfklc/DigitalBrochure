@@ -10,11 +10,13 @@ export const subscriptionPlanEnum = pgEnum("subscription_plan", ["monthly", "six
 export const templateTypeEnum = pgEnum("template_type", ["single_page", "multi_page"]);
 export const campaignStatusEnum = pgEnum("campaign_status", ["draft", "active", "scheduled", "completed", "paused"]);
 export const tutorialTypeEnum = pgEnum("tutorial_type", ["video", "pdf", "announcement"]);
+export const joinRequestStatusEnum = pgEnum("join_request_status", ["pending", "approved", "rejected"]);
 
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  code: text("code").unique(),
   logoUrl: text("logo_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -37,6 +39,17 @@ export const users = pgTable("users", {
   resetTokenExpiry: timestamp("reset_token_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   language: text("language").default("en"),
+});
+
+export const joinRequests = pgTable("join_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  status: joinRequestStatusEnum("status").notNull().default("pending"),
+  message: text("message"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const subscriptions = pgTable("subscriptions", {
@@ -171,6 +184,7 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   products: many(products),
   templates: many(templates),
   campaigns: many(campaigns),
+  joinRequests: many(joinRequests),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -179,6 +193,13 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   sentMessages: many(messages, { relationName: "sender" }),
   receivedMessages: many(messages, { relationName: "receiver" }),
   suggestions: many(suggestions),
+  joinRequests: many(joinRequests),
+}));
+
+export const joinRequestsRelations = relations(joinRequests, ({ one }) => ({
+  user: one(users, { fields: [joinRequests.userId], references: [users.id] }),
+  tenant: one(tenants, { fields: [joinRequests.tenantId], references: [tenants.id] }),
+  reviewer: one(users, { fields: [joinRequests.reviewedBy], references: [users.id] }),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
@@ -220,6 +241,7 @@ export const suggestionsRelations = relations(suggestions, ({ one }) => ({
 
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertJoinRequestSchema = createInsertSchema(joinRequests).omit({ id: true, createdAt: true, reviewedAt: true });
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
 export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true });
@@ -235,6 +257,8 @@ export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type JoinRequest = typeof joinRequests.$inferSelect;
+export type InsertJoinRequest = z.infer<typeof insertJoinRequestSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Product = typeof products.$inferSelect;
@@ -269,6 +293,9 @@ export const registerSchema = z.object({
   lastName: z.string().min(1),
   mobilePhone: z.string().optional(),
   captchaToken: z.string().optional(),
+  signupType: z.enum(["create_tenant", "join_tenant"]).optional(),
+  tenantCode: z.string().optional(),
+  joinMessage: z.string().optional(),
 });
 
 export const resetPasswordSchema = z.object({

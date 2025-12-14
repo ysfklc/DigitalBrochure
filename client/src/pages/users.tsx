@@ -12,7 +12,12 @@ import {
   Trash2,
   Mail,
   Shield,
-  User as UserIcon
+  User as UserIcon,
+  UserPlus,
+  Check,
+  X,
+  Clock,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,9 +62,33 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import type { User } from "@shared/schema";
+
+interface JoinRequestWithUser {
+  id: string;
+  userId: string;
+  tenantId: string;
+  status: string;
+  message: string | null;
+  createdAt: string;
+  user: { id: string; email: string; firstName: string; lastName: string } | null;
+}
 
 const userFormSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -74,12 +103,15 @@ type UserFormValues = z.infer<typeof userFormSchema>;
 export default function UsersPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  const isAdmin = currentUser?.role === "tenant_admin" || currentUser?.role === "super_admin";
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -94,6 +126,52 @@ export default function UsersPage() {
 
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
+  });
+
+  const { data: joinRequests, isLoading: isLoadingJoinRequests } = useQuery<JoinRequestWithUser[]>({
+    queryKey: ["/api/join-requests"],
+    enabled: isAdmin,
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      return apiRequest("POST", `/api/join-requests/${requestId}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/join-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: t("common.success"),
+        description: "Join request approved. User has been added to the organization.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("common.error"),
+        description: error.message || "Failed to approve request",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      return apiRequest("POST", `/api/join-requests/${requestId}/reject`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/join-requests"] });
+      toast({
+        title: t("common.success"),
+        description: "Join request rejected.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("common.error"),
+        description: error.message || "Failed to reject request",
+        variant: "destructive",
+      });
+    },
   });
 
   const filteredUsers = users?.filter((user) => {
@@ -194,6 +272,8 @@ export default function UsersPage() {
     createMutation.mutate(data);
   };
 
+  const pendingRequestsCount = joinRequests?.length || 0;
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-4 p-6 border-b">
@@ -206,116 +286,233 @@ export default function UsersPage() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 p-4 border-b">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("common.search")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-            data-testid="input-search-users"
-          />
+      <Tabs defaultValue="users" className="flex-1 flex flex-col">
+        <div className="border-b px-6 pt-2">
+          <TabsList>
+            <TabsTrigger value="users" data-testid="tab-users">
+              <UserIcon className="h-4 w-4 mr-2" />
+              Team Members
+            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="requests" data-testid="tab-join-requests">
+                <UserPlus className="h-4 w-4 mr-2" />
+                Join Requests
+                {pendingRequestsCount > 0 && (
+                  <Badge variant="secondary" className="ml-2">{pendingRequestsCount}</Badge>
+                )}
+              </TabsTrigger>
+            )}
+          </TabsList>
         </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-role-filter">
-            <SelectValue placeholder={t("users.role")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("common.all")}</SelectItem>
-            <SelectItem value="tenant_admin">{t("users.tenantAdmin")}</SelectItem>
-            <SelectItem value="tenant_user">{t("users.tenantUser")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full" />
-            ))}
+        <TabsContent value="users" className="flex-1 flex flex-col m-0">
+          <div className="flex items-center gap-4 p-4 border-b">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={t("common.search")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-users"
+              />
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-[180px]" data-testid="select-role-filter">
+                <SelectValue placeholder={t("users.role")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("common.all")}</SelectItem>
+                <SelectItem value="tenant_admin">{t("users.tenantAdmin")}</SelectItem>
+                <SelectItem value="tenant_user">{t("users.tenantUser")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        ) : !filteredUsers?.length ? (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <UserIcon className="h-12 w-12 mb-4" />
-            <p>{t("users.noUsers")}</p>
-            <Button className="mt-4" onClick={handleAddUser} data-testid="button-first-user">
-              <Plus className="h-4 w-4 mr-2" />
-              {t("users.inviteUser")}
-            </Button>
+
+          <div className="flex-1 overflow-auto p-6">
+            {isLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : !filteredUsers?.length ? (
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                <UserIcon className="h-12 w-12 mb-4" />
+                <p>{t("users.noUsers")}</p>
+                <Button className="mt-4" onClick={handleAddUser} data-testid="button-first-user">
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t("users.inviteUser")}
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("common.name")}</TableHead>
+                    <TableHead>{t("auth.email")}</TableHead>
+                    <TableHead>{t("users.role")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead className="text-right">{t("common.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map((user) => (
+                    <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarFallback className="text-xs">
+                              {user.firstName?.[0]}{user.lastName?.[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">
+                            {user.firstName} {user.lastName}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant={getRoleBadgeVariant(user.role)}>
+                          <Shield className="h-3 w-3 mr-1" />
+                          {getRoleLabel(user.role)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={user.isActive ? "default" : "secondary"}>
+                          {user.isActive ? t("users.active") : t("users.inactive")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-user-menu-${user.id}`}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              {t("users.editUser")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Mail className="h-4 w-4 mr-2" />
+                              Resend Invitation
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDeleteUser(user)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {t("users.deleteUser")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("common.name")}</TableHead>
-                <TableHead>{t("auth.email")}</TableHead>
-                <TableHead>{t("users.role")}</TableHead>
-                <TableHead>{t("common.status")}</TableHead>
-                <TableHead className="text-right">{t("common.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback className="text-xs">
-                          {user.firstName?.[0]}{user.lastName?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">
-                        {user.firstName} {user.lastName}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={getRoleBadgeVariant(user.role)}>
-                      <Shield className="h-3 w-3 mr-1" />
-                      {getRoleLabel(user.role)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={user.isActive ? "default" : "secondary"}>
-                      {user.isActive ? t("users.active") : t("users.inactive")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" data-testid={`button-user-menu-${user.id}`}>
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          {t("users.editUser")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Mail className="h-4 w-4 mr-2" />
-                          Resend Invitation
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => handleDeleteUser(user)}
+        </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="requests" className="flex-1 overflow-auto p-6 m-0">
+            {isLoadingJoinRequests ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : !joinRequests?.length ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <UserPlus className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="font-medium text-lg mb-1">No pending requests</h3>
+                  <p className="text-muted-foreground text-sm text-center">
+                    When someone requests to join your organization, it will appear here.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Pending Join Requests</CardTitle>
+                    <CardDescription>
+                      Review and approve or reject requests from users who want to join your organization.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {joinRequests.map((request) => (
+                        <div 
+                          key={request.id} 
+                          className="flex items-start justify-between p-4 rounded-md border bg-card"
+                          data-testid={`join-request-admin-${request.id}`}
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          {t("users.deleteUser")}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                          <div className="flex items-start gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback>
+                                {request.user?.firstName?.[0]}{request.user?.lastName?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">
+                                {request.user?.firstName} {request.user?.lastName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {request.user?.email}
+                              </p>
+                              {request.message && (
+                                <p className="text-sm mt-2 text-muted-foreground italic">
+                                  "{request.message}"
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                <span>Requested {new Date(request.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => rejectMutation.mutate(request.id)}
+                              disabled={rejectMutation.isPending || approveMutation.isPending}
+                              data-testid={`button-reject-${request.id}`}
+                            >
+                              {rejectMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => approveMutation.mutate(request.id)}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                              data-testid={`button-approve-${request.id}`}
+                            >
+                              {approveMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4 mr-1" />
+                              )}
+                              Approve
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </TabsContent>
         )}
-      </div>
+      </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">

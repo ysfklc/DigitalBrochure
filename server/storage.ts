@@ -2,13 +2,14 @@ import { eq, and, or, desc, ilike } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, products, templates,
-  campaigns, campaignProducts, messages, suggestions, tutorials, systemConfig, productConnectors,
+  campaigns, campaignProducts, messages, suggestions, tutorials, systemConfig, productConnectors, joinRequests,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Product, type InsertProduct,
   type Template, type InsertTemplate, type Campaign, type InsertCampaign,
   type CampaignProduct, type InsertCampaignProduct, type Message, type InsertMessage,
   type Suggestion, type InsertSuggestion, type Tutorial, type InsertTutorial,
-  type SystemConfig, type InsertSystemConfig, type ProductConnector, type InsertProductConnector
+  type SystemConfig, type InsertSystemConfig, type ProductConnector, type InsertProductConnector,
+  type JoinRequest, type InsertJoinRequest
 } from "@shared/schema";
 
 export interface IStorage {
@@ -84,6 +85,16 @@ export interface IStorage {
   createProductConnector(connector: InsertProductConnector): Promise<ProductConnector>;
   updateProductConnector(id: string, data: Partial<InsertProductConnector>): Promise<ProductConnector | undefined>;
   deleteProductConnector(id: string): Promise<boolean>;
+
+  getTenantByCode(code: string): Promise<Tenant | undefined>;
+  
+  getJoinRequest(id: string): Promise<JoinRequest | undefined>;
+  getJoinRequestsByTenant(tenantId: string): Promise<JoinRequest[]>;
+  getJoinRequestsByUser(userId: string): Promise<JoinRequest[]>;
+  getPendingJoinRequestsByTenant(tenantId: string): Promise<JoinRequest[]>;
+  createJoinRequest(request: InsertJoinRequest): Promise<JoinRequest>;
+  updateJoinRequest(id: string, data: Partial<InsertJoinRequest>): Promise<JoinRequest | undefined>;
+  deleteJoinRequest(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -412,6 +423,49 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProductConnector(id: string): Promise<boolean> {
     await db.delete(productConnectors).where(eq(productConnectors.id, id));
+    return true;
+  }
+
+  async getTenantByCode(code: string): Promise<Tenant | undefined> {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.code, code));
+    return tenant;
+  }
+
+  async getJoinRequest(id: string): Promise<JoinRequest | undefined> {
+    const [request] = await db.select().from(joinRequests).where(eq(joinRequests.id, id));
+    return request;
+  }
+
+  async getJoinRequestsByTenant(tenantId: string): Promise<JoinRequest[]> {
+    return db.select().from(joinRequests)
+      .where(eq(joinRequests.tenantId, tenantId))
+      .orderBy(desc(joinRequests.createdAt));
+  }
+
+  async getJoinRequestsByUser(userId: string): Promise<JoinRequest[]> {
+    return db.select().from(joinRequests)
+      .where(eq(joinRequests.userId, userId))
+      .orderBy(desc(joinRequests.createdAt));
+  }
+
+  async getPendingJoinRequestsByTenant(tenantId: string): Promise<JoinRequest[]> {
+    return db.select().from(joinRequests)
+      .where(and(eq(joinRequests.tenantId, tenantId), eq(joinRequests.status, "pending")))
+      .orderBy(desc(joinRequests.createdAt));
+  }
+
+  async createJoinRequest(request: InsertJoinRequest): Promise<JoinRequest> {
+    const [created] = await db.insert(joinRequests).values(request).returning();
+    return created;
+  }
+
+  async updateJoinRequest(id: string, data: Partial<InsertJoinRequest>): Promise<JoinRequest | undefined> {
+    const [updated] = await db.update(joinRequests).set(data).where(eq(joinRequests.id, id)).returning();
+    return updated;
+  }
+
+  async deleteJoinRequest(id: string): Promise<boolean> {
+    await db.delete(joinRequests).where(eq(joinRequests.id, id));
     return true;
   }
 }

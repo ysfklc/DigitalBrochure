@@ -405,7 +405,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: "This organization URL is already taken" });
       }
 
-      const tenant = await storage.createTenant({ name: data.name, slug: data.slug });
+      const generateTenantCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 8; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      };
+
+      let tenantCode = generateTenantCode();
+      let existingCodeTenant = await storage.getTenantByCode(tenantCode);
+      while (existingCodeTenant) {
+        tenantCode = generateTenantCode();
+        existingCodeTenant = await storage.getTenantByCode(tenantCode);
+      }
+
+      const tenant = await storage.createTenant({ name: data.name, slug: data.slug, code: tenantCode });
       await storage.updateUser(req.user!.id, { tenantId: tenant.id });
 
       res.json({ tenant, message: "Organization created successfully" });
@@ -415,6 +431,153 @@ export async function registerRoutes(
       }
       console.error("Tenant setup error:", error);
       res.status(500).json({ error: "Failed to create organization" });
+    }
+  });
+
+  app.get("/api/tenant/by-code/:code", async (req: Request, res: Response) => {
+    try {
+      const tenant = await storage.getTenantByCode(req.params.code.toUpperCase());
+      if (!tenant) {
+        return res.status(404).json({ error: "Organization not found with this code" });
+      }
+      res.json({ id: tenant.id, name: tenant.name });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to find organization" });
+    }
+  });
+
+  app.post("/api/join-requests", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { tenantCode, message } = req.body;
+      
+      if (req.user!.tenantId) {
+        return res.status(400).json({ error: "You are already a member of an organization" });
+      }
+
+      const tenant = await storage.getTenantByCode(tenantCode.toUpperCase());
+      if (!tenant) {
+        return res.status(404).json({ error: "Organization not found with this code" });
+      }
+
+      const existingRequests = await storage.getJoinRequestsByUser(req.user!.id);
+      const pendingRequest = existingRequests.find(r => r.tenantId === tenant.id && r.status === "pending");
+      if (pendingRequest) {
+        return res.status(400).json({ error: "You already have a pending request to join this organization" });
+      }
+
+      const joinRequest = await storage.createJoinRequest({
+        userId: req.user!.id,
+        tenantId: tenant.id,
+        message: message || null,
+        status: "pending",
+        reviewedBy: null
+      });
+
+      res.json({ joinRequest, message: "Join request submitted successfully" });
+    } catch (error) {
+      console.error("Create join request error:", error);
+      res.status(500).json({ error: "Failed to submit join request" });
+    }
+  });
+
+  app.get("/api/join-requests", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user!.role !== "tenant_admin" && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "Only admins can view join requests" });
+      }
+      const requests = await storage.getPendingJoinRequestsByTenant(req.user!.tenantId!);
+      const requestsWithUsers = await Promise.all(requests.map(async (request) => {
+        const user = await storage.getUser(request.userId);
+        return {
+          ...request,
+          user: user ? { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } : null
+        };
+      }));
+      res.json(requestsWithUsers);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get join requests" });
+    }
+  });
+
+  app.get("/api/join-requests/my", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const requests = await storage.getJoinRequestsByUser(req.user!.id);
+      const requestsWithTenants = await Promise.all(requests.map(async (request) => {
+        const tenant = await storage.getTenant(request.tenantId);
+        return {
+          ...request,
+          tenant: tenant ? { id: tenant.id, name: tenant.name } : null
+        };
+      }));
+      res.json(requestsWithTenants);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get your join requests" });
+    }
+  });
+
+  app.post("/api/join-requests/:id/approve", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user!.role !== "tenant_admin" && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "Only admins can approve join requests" });
+      }
+
+      const request = await storage.getJoinRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ error: "Join request not found" });
+      }
+
+      if (request.tenantId !== req.user!.tenantId && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "You can only approve requests for your organization" });
+      }
+
+      if (request.status !== "pending") {
+        return res.status(400).json({ error: "This request has already been processed" });
+      }
+
+      await storage.updateJoinRequest(req.params.id, {
+        status: "approved",
+        reviewedBy: req.user!.id,
+        reviewedAt: new Date()
+      } as any);
+
+      await storage.updateUser(request.userId, { tenantId: request.tenantId, role: "tenant_user" });
+
+      res.json({ message: "Join request approved successfully" });
+    } catch (error) {
+      console.error("Approve join request error:", error);
+      res.status(500).json({ error: "Failed to approve join request" });
+    }
+  });
+
+  app.post("/api/join-requests/:id/reject", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user!.role !== "tenant_admin" && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "Only admins can reject join requests" });
+      }
+
+      const request = await storage.getJoinRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ error: "Join request not found" });
+      }
+
+      if (request.tenantId !== req.user!.tenantId && req.user!.role !== "super_admin") {
+        return res.status(403).json({ error: "You can only reject requests for your organization" });
+      }
+
+      if (request.status !== "pending") {
+        return res.status(400).json({ error: "This request has already been processed" });
+      }
+
+      await storage.updateJoinRequest(req.params.id, {
+        status: "rejected",
+        reviewedBy: req.user!.id,
+        reviewedAt: new Date()
+      } as any);
+
+      res.json({ message: "Join request rejected" });
+    } catch (error) {
+      console.error("Reject join request error:", error);
+      res.status(500).json({ error: "Failed to reject join request" });
     }
   });
 

@@ -45,6 +45,10 @@ Preferred communication style: Simple, everyday language.
 - Tenant isolation at the database level via `tenantId` foreign keys
 - Each tenant has their own users, products, templates, and campaigns
 - Super Admin can switch between tenants for management purposes
+- **Organization Codes**: Each tenant has a unique 8-character code for user invitations
+- **Join Requests**: Users can request to join organizations using tenant codes
+  - Admins can approve or reject requests from the Team Members page
+  - Approved users are automatically added as tenant_user role
 
 ### Build System
 - **Development**: Vite dev server with HMR
