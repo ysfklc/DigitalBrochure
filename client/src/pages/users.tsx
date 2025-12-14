@@ -17,7 +17,9 @@ import {
   Check,
   X,
   Clock,
-  Loader2
+  Loader2,
+  Copy,
+  Building2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +92,14 @@ interface JoinRequestWithUser {
   user: { id: string; email: string; firstName: string; lastName: string } | null;
 }
 
+interface TenantInfo {
+  id: string;
+  name: string;
+  slug: string;
+  code: string | null;
+  logoUrl: string | null;
+}
+
 const userFormSchema = z.object({
   email: z.string().email("Invalid email address"),
   firstName: z.string().min(1, "First name is required"),
@@ -128,10 +138,24 @@ export default function UsersPage() {
     queryKey: ["/api/users"],
   });
 
+  const { data: tenantInfo } = useQuery<TenantInfo>({
+    queryKey: ["/api/tenant/current"],
+  });
+
   const { data: joinRequests, isLoading: isLoadingJoinRequests } = useQuery<JoinRequestWithUser[]>({
     queryKey: ["/api/join-requests"],
     enabled: isAdmin,
   });
+
+  const copyTenantCode = () => {
+    if (tenantInfo?.code) {
+      navigator.clipboard.writeText(tenantInfo.code);
+      toast({
+        title: t("common.success"),
+        description: "Organization code copied to clipboard!",
+      });
+    }
+  };
 
   const approveMutation = useMutation({
     mutationFn: async (requestId: string) => {
@@ -285,6 +309,31 @@ export default function UsersPage() {
           {t("users.inviteUser")}
         </Button>
       </div>
+
+      {tenantInfo?.code && (
+        <div className="px-6 py-4 border-b bg-muted/30">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Organization Invite Code</p>
+                <p className="font-mono text-lg font-semibold tracking-wider" data-testid="text-tenant-code">
+                  {tenantInfo.code}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={copyTenantCode} data-testid="button-copy-code">
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Code
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Share this code with new users so they can request to join your organization.
+          </p>
+        </div>
+      )}
 
       <Tabs defaultValue="users" className="flex-1 flex flex-col">
         <div className="border-b px-6 pt-2">

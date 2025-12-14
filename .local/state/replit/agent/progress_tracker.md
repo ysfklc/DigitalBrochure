@@ -5,4 +5,5 @@
 [x] 5. Update schema with tenant code and join_requests table
 [x] 6. Update storage interface and implementation for join requests
 [x] 7. Add API routes for join requests
-[ ] 8. Update frontend signup flow for create/join tenant options
+[x] 8. Update frontend signup flow for create/join tenant options
+[x] 9. Make tenant code visible to both admins and users on Team Members page

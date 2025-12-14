@@ -434,6 +434,24 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tenant/current", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      if (!tenant) {
+        return res.status(404).json({ error: "Organization not found" });
+      }
+      res.json({ 
+        id: tenant.id, 
+        name: tenant.name, 
+        slug: tenant.slug,
+        code: tenant.code,
+        logoUrl: tenant.logoUrl 
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get organization info" });
+    }
+  });
+
   app.get("/api/tenant/by-code/:code", async (req: Request, res: Response) => {
     try {
       const tenant = await storage.getTenantByCode(req.params.code.toUpperCase());
