@@ -43,8 +43,31 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Campaign, Product, Template } from "@shared/schema";
+
+type CanvasSizeKey = 'square' | 'portrait' | 'landscape';
+
+const CANVAS_SIZES: Record<CanvasSizeKey, { width: number; height: number; label: string; ratio: string }> = {
+  square: { width: 1080, height: 1080, label: 'Square', ratio: '1:1' },
+  portrait: { width: 1080, height: 1350, label: 'Portrait', ratio: '4:5' },
+  landscape: { width: 1080, height: 566, label: 'Landscape', ratio: '1.91:1' },
+};
 
 interface CanvasElement {
   id: string;
@@ -67,6 +90,7 @@ export default function CampaignEditorPage() {
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(100);
+  const [canvasSize, setCanvasSize] = useState<CanvasSizeKey>('square');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
@@ -79,6 +103,9 @@ export default function CampaignEditorPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0, elementX: 0, elementY: 0 });
+  const [campaignName, setCampaignName] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [savedCampaignId, setSavedCampaignId] = useState<string | null>(null);
 
   const { data: campaign, isLoading: loadingCampaign } = useQuery<Campaign>({
     queryKey: ["/api/campaigns", id],
@@ -119,11 +146,91 @@ export default function CampaignEditorPage() {
     })),
   ];
 
+  // Load existing campaign data
+  useEffect(() => {
+    if (campaign) {
+      setCampaignName(campaign.name);
+      setSavedCampaignId(campaign.id);
+      if (campaign.canvasData) {
+        const data = campaign.canvasData as any;
+        if (data.elements) setCanvasElements(data.elements);
+        if (data.canvasSize) setCanvasSize(data.canvasSize);
+        if (data.totalPages) setTotalPages(data.totalPages);
+      }
+    }
+  }, [campaign]);
+
+  const createCampaignMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/campaigns", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setSavedCampaignId(data.id);
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      toast({
+        title: t("common.success"),
+        description: t("campaigns.savedSuccessfully"),
+      });
+      if (id === "new") {
+        setLocation(`/campaigns/${data.id}/edit`);
+      }
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: t("campaigns.saveFailed"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCampaignMutation = useMutation({
+    mutationFn: async ({ campaignId, data }: { campaignId: string; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/campaigns/${campaignId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      toast({
+        title: t("common.success"),
+        description: t("campaigns.savedSuccessfully"),
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: t("campaigns.saveFailed"),
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSave = () => {
-    toast({
-      title: t("common.success"),
-      description: "Campaign saved successfully.",
-    });
+    const canvasData = {
+      elements: canvasElements,
+      canvasSize,
+      totalPages,
+    };
+
+    const campaignData = {
+      name: campaignName || t("campaigns.untitled"),
+      canvasData,
+      status: "draft" as const,
+    };
+
+    if (savedCampaignId || (id && id !== "new")) {
+      updateCampaignMutation.mutate({
+        campaignId: savedCampaignId || id!,
+        data: campaignData,
+      });
+    } else {
+      createCampaignMutation.mutate(campaignData);
+    }
+  };
+
+  const handlePreview = () => {
+    setShowPreview(true);
   };
 
   const handleUndo = () => {
@@ -415,7 +522,24 @@ export default function CampaignEditorPage() {
             <TooltipContent>Zoom In</TooltipContent>
           </Tooltip>
           <Separator orientation="vertical" className="h-6 mx-2" />
-          <Button variant="outline" data-testid="button-preview">
+          <Select value={canvasSize} onValueChange={(value: CanvasSizeKey) => setCanvasSize(value)}>
+            <SelectTrigger className="w-[160px]" data-testid="select-canvas-size">
+              <SelectValue placeholder="Canvas Size" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="square" data-testid="option-square">
+                Square (1:1)
+              </SelectItem>
+              <SelectItem value="portrait" data-testid="option-portrait">
+                Portrait (4:5)
+              </SelectItem>
+              <SelectItem value="landscape" data-testid="option-landscape">
+                Landscape (1.91:1)
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Separator orientation="vertical" className="h-6 mx-2" />
+          <Button variant="outline" onClick={handlePreview} data-testid="button-preview">
             <Eye className="h-4 w-4 mr-2" />
             {t("editor.preview")}
           </Button>
@@ -566,8 +690,8 @@ export default function CampaignEditorPage() {
             ref={canvasRef}
             className={`bg-white shadow-lg rounded-lg relative ${isDragging ? 'ring-2 ring-primary ring-offset-2' : ''} ${isMovingElement ? 'cursor-grabbing' : ''}`}
             style={{
-              width: `${(595 * zoom) / 100}px`,
-              height: `${(842 * zoom) / 100}px`,
+              width: `${(CANVAS_SIZES[canvasSize].width * zoom) / 100 * 0.5}px`,
+              height: `${(CANVAS_SIZES[canvasSize].height * zoom) / 100 * 0.5}px`,
               transform: `scale(1)`,
             }}
             onDrop={handleDrop}
@@ -798,6 +922,75 @@ export default function CampaignEditorPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>{t("editor.preview")}: {campaignName || t("campaigns.untitled")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center py-4">
+            <div
+              className="bg-white shadow-lg rounded-lg relative"
+              style={{
+                width: `${CANVAS_SIZES[canvasSize].width * 0.4}px`,
+                height: `${CANVAS_SIZES[canvasSize].height * 0.4}px`,
+              }}
+            >
+              {currentPageElements.map((element) => (
+                <div
+                  key={element.id}
+                  className="absolute"
+                  style={{
+                    left: `${element.x * 0.4}px`,
+                    top: `${element.y * 0.4}px`,
+                    width: `${element.width * 0.4}px`,
+                    height: `${element.height * 0.4}px`,
+                    transform: `rotate(${element.rotation}deg)`,
+                    opacity: element.opacity / 100,
+                  }}
+                >
+                  {element.type === 'product' && (
+                    <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col">
+                      <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
+                        {element.data.imageUrl ? (
+                          <img
+                            src={element.data.imageUrl}
+                            alt={element.data.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Package className="h-6 w-6 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="p-1 text-center">
+                        <p className="text-xs font-medium truncate">{element.data.name}</p>
+                        <p className="text-xs text-muted-foreground">${element.data.price}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {currentPageElements.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                  <p className="text-sm">{t("editor.emptyCanvas")}</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-center gap-2">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <Button
+                key={i}
+                variant={currentPage === i + 1 ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCurrentPage(i + 1)}
+              >
+                {i + 1}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

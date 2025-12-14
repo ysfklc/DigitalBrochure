@@ -25,3 +25,4 @@
     - Properties panel now shows actual element data and allows editing (position, size, rotation, opacity)
     - Added layers panel showing all elements on current page
     - Added delete element functionality
+[x] 17. Re-verified application running after environment migration - login page displays correctly
