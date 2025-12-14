@@ -26,3 +26,12 @@
     - Added layers panel showing all elements on current page
     - Added delete element functionality
 [x] 17. Re-verified application running after environment migration - login page displays correctly
+[x] 18. Final environment migration complete - npm install run, workflow restarted, application verified working on December 14, 2025
+[x] 19. Fixed campaign saving issue:
+    - Bug: Mutations were calling res.json() on already-parsed JSON data from apiRequest
+    - Fix: Removed the redundant .json() calls in createCampaignMutation and updateCampaignMutation
+    - Added validation in backend route for users without tenantId
+[x] 20. Improved campaign saving with name prompt and proper canvas data:
+    - Added save dialog that prompts for campaign name before saving new campaigns
+    - Canvas data now properly serializes all element properties (position, size, rotation, opacity, type, data, page)
+    - Added translations for save dialog in English, Turkish, and German

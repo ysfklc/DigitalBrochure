@@ -55,6 +55,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
@@ -106,6 +108,8 @@ export default function CampaignEditorPage() {
   const [campaignName, setCampaignName] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [savedCampaignId, setSavedCampaignId] = useState<string | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [tempCampaignName, setTempCampaignName] = useState("");
 
   const { data: campaign, isLoading: loadingCampaign } = useQuery<Campaign>({
     queryKey: ["/api/campaigns", id],
@@ -162,8 +166,7 @@ export default function CampaignEditorPage() {
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/campaigns", data);
-      return res.json();
+      return await apiRequest("POST", "/api/campaigns", data) as any;
     },
     onSuccess: (data) => {
       setSavedCampaignId(data.id);
@@ -187,8 +190,7 @@ export default function CampaignEditorPage() {
 
   const updateCampaignMutation = useMutation({
     mutationFn: async ({ campaignId, data }: { campaignId: string; data: any }) => {
-      const res = await apiRequest("PATCH", `/api/campaigns/${campaignId}`, data);
-      return res.json();
+      return await apiRequest("PATCH", `/api/campaigns/${campaignId}`, data) as any;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
@@ -207,14 +209,35 @@ export default function CampaignEditorPage() {
   });
 
   const handleSave = () => {
+    if (!campaignName && !savedCampaignId && id === "new") {
+      setTempCampaignName("");
+      setShowSaveDialog(true);
+      return;
+    }
+    
+    performSave(campaignName);
+  };
+
+  const performSave = (name: string) => {
     const canvasData = {
-      elements: canvasElements,
+      elements: canvasElements.map(el => ({
+        id: el.id,
+        type: el.type,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        rotation: el.rotation,
+        opacity: el.opacity,
+        data: el.data,
+        page: el.page,
+      })),
       canvasSize,
       totalPages,
     };
 
     const campaignData = {
-      name: campaignName || t("campaigns.untitled"),
+      name: name,
       canvasData,
       status: "draft" as const,
     };
@@ -227,6 +250,20 @@ export default function CampaignEditorPage() {
     } else {
       createCampaignMutation.mutate(campaignData);
     }
+  };
+
+  const handleSaveDialogConfirm = () => {
+    if (!tempCampaignName.trim()) {
+      toast({
+        title: t("common.error"),
+        description: t("campaigns.nameRequired"),
+        variant: "destructive",
+      });
+      return;
+    }
+    setCampaignName(tempCampaignName.trim());
+    setShowSaveDialog(false);
+    performSave(tempCampaignName.trim());
   };
 
   const handlePreview = () => {
@@ -989,6 +1026,43 @@ export default function CampaignEditorPage() {
               </Button>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("campaigns.saveCampaign")}</DialogTitle>
+            <DialogDescription>
+              {t("campaigns.enterCampaignName")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="campaign-name">{t("campaigns.campaignName")}</Label>
+            <Input
+              id="campaign-name"
+              value={tempCampaignName}
+              onChange={(e) => setTempCampaignName(e.target.value)}
+              placeholder={t("campaigns.enterName")}
+              className="mt-2"
+              data-testid="input-campaign-name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSaveDialogConfirm();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveDialog(false)} data-testid="button-cancel-save">
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={handleSaveDialogConfirm} data-testid="button-confirm-save">
+              <Save className="h-4 w-4 mr-2" />
+              {t("editor.save")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,42 +1,40 @@
-# Persisted Information
+# Persisted Information - e-Brochure Application
 
-## Recent Changes Made
+## Current State
+The application is a multi-tenant e-brochure/digital catalog creation platform running on port 5000.
 
-### 1. Dashboard Real Data (Completed)
-- Updated `/api/dashboard/stats` endpoint in `server/routes.ts` to return real data:
-  - `campaignChartData`: Monthly campaign creation data for last 6 months
-  - `productCategoryData`: Product category breakdown
-  - `recentActivity`: Recent campaign activity with timestamps
-- Updated `client/src/pages/dashboard.tsx` to use real data with proper empty states
+## Recent Changes (December 14, 2025)
 
-### 2. SuperAdmin User Creation (Completed)
-- Updated `client/src/pages/users.tsx`:
-  - Modified form schema to include `super_admin` role: `z.enum(["super_admin", "tenant_admin", "tenant_user"])`
-  - Added conditional SuperAdmin option in role dropdown (only visible to super_admin users)
+### Campaign Saving Fix
+1. **Fixed apiRequest issue**: Mutations in `client/src/pages/campaign-editor.tsx` were calling `.json()` on already-parsed JSON. Fixed by removing redundant `.json()` calls.
 
-### 3. Product Image Upload (Completed)
-- Added multer for file upload handling in `server/routes.ts`:
-  - Created `uploads` directory for storing files
-  - Added `/api/upload` POST endpoint for file uploads
-  - Added `/uploads` static file serving
-- Updated `client/src/pages/products.tsx`:
-  - Added file upload button and hidden file input
-  - Added image preview with clear button
-  - Kept URL input as alternative option
+2. **Added tenantId validation**: `server/routes.ts` POST `/api/campaigns` now checks for tenantId before creating campaign.
 
-## Known LSP Errors
-- `server/routes.ts` line ~1356: Property 'firstName' does not exist (pre-existing issue, not from recent changes)
-- `client/src/pages/users.tsx`: Minor typing issue (pre-existing)
+3. **Added campaign name prompt dialog**: 
+   - New state: `showSaveDialog`, `tempCampaignName`
+   - Dialog prompts for campaign name when saving new campaigns
+   - Added `handleSaveDialogConfirm` function
 
-## Application State
-- Workflow "Start application" is running on port 5000
-- Database integration is configured
+4. **Improved canvas data serialization**: `performSave` maps all element properties (id, type, x, y, width, height, rotation, opacity, data, page)
+
+5. **Added translations** in `client/src/lib/i18n.ts` for English, Turkish, German
+
+## Key Files
+- `client/src/pages/campaign-editor.tsx` - Campaign editor with save dialog
+- `server/routes.ts` - Backend API routes
+- `client/src/lib/i18n.ts` - Translations
+- `shared/schema.ts` - Database schema
+- `server/storage.ts` - Database operations
+
+## Architecture
+- Frontend: React + Vite + TypeScript + shadcn/ui
+- Backend: Express.js with JWT authentication
+- Database: PostgreSQL with Drizzle ORM
 - Super admin: superadmin@example.com / Super12345
 
-## File Structure Notes
-- Backend routes: `server/routes.ts`
-- Product page: `client/src/pages/products.tsx`
-- Users page: `client/src/pages/users.tsx`
-- Dashboard: `client/src/pages/dashboard.tsx`
-- Schema: `shared/schema.ts`
-- Uploads stored in: `uploads/` directory
+## Progress
+See `.local/state/replit/agent/progress_tracker.md` for full task history.
+
+## Notes
+- User needs tenant membership to create campaigns (not super_admin)
+- Canvas editor supports drag-drop products with full element manipulation

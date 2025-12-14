@@ -870,6 +870,9 @@ export async function registerRoutes(
 
   app.post("/api/campaigns", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
     try {
+      if (!req.user!.tenantId) {
+        return res.status(400).json({ error: "You must belong to an organization to create campaigns" });
+      }
       const data = insertCampaignSchema.parse({
         ...req.body,
         tenantId: req.user!.tenantId,
