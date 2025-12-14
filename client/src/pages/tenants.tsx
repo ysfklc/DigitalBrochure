@@ -34,9 +34,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Building2, Users, CreditCard } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, Users, CreditCard, Eye } from "lucide-react";
 import { format } from "date-fns";
-import type { Tenant, Subscription } from "@shared/schema";
+import { useAuth } from "@/lib/auth-context";
+import { useLocation } from "wouter";
+import type { Tenant, Subscription, User } from "@shared/schema";
 
 interface TenantWithDetails extends Tenant {
   userCount: number;
@@ -46,6 +48,8 @@ interface TenantWithDetails extends Tenant {
 export default function TenantsPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const { user, token, startImpersonation } = useAuth();
+  const [, setLocation] = useLocation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState<TenantWithDetails | null>(null);
   const [deletingTenant, setDeletingTenant] = useState<TenantWithDetails | null>(null);
@@ -98,6 +102,27 @@ export default function TenantsPage() {
       toast({ title: t("tenants.deleteError"), variant: "destructive" });
     },
   });
+
+  const impersonateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/admin/tenants/${id}/impersonate`) as Response;
+      return response.json();
+    },
+    onSuccess: (data: { user: User; token: string; tenant: Tenant }) => {
+      if (user && token) {
+        startImpersonation(data.user, data.token, user, token);
+        toast({ title: t("tenants.impersonateSuccess", { name: data.tenant.name }) });
+        setLocation("/dashboard");
+      }
+    },
+    onError: () => {
+      toast({ title: t("tenants.impersonateError"), variant: "destructive" });
+    },
+  });
+
+  const handleImpersonate = (tenantId: string) => {
+    impersonateMutation.mutate(tenantId);
+  };
 
   const handleCreate = () => {
     createMutation.mutate(formData);
@@ -195,6 +220,16 @@ export default function TenantsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleImpersonate(tenant.id)}
+                        disabled={impersonateMutation.isPending}
+                        data-testid={`button-view-tenant-${tenant.id}`}
+                        title={t("tenants.viewAsTenant")}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

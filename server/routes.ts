@@ -83,6 +83,8 @@ interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
+    firstName: string;
+    lastName: string;
     tenantId: string | null;
     role: string;
   };
@@ -106,6 +108,8 @@ const authenticate = async (req: AuthRequest, res: Response, next: NextFunction)
     req.user = {
       id: user.id,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
       tenantId: user.tenantId,
       role: user.role
     };
@@ -1341,6 +1345,42 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete tenant" });
+    }
+  });
+
+  app.post("/api/admin/tenants/:id/impersonate", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      
+      const users = await storage.getUsersByTenant(tenant.id);
+      const tenantAdmin = users.find(u => u.role === "tenant_admin");
+      
+      if (!tenantAdmin) {
+        return res.status(400).json({ error: "No tenant admin found for this tenant" });
+      }
+      
+      const impersonationToken = jwt.sign(
+        { 
+          userId: tenantAdmin.id,
+          impersonatedBy: req.user!.id,
+          isImpersonation: true
+        },
+        JWT_SECRET,
+        { expiresIn: "2h" }
+      );
+      
+      const { password, totpSecret, ...safeUser } = tenantAdmin;
+      res.json({ 
+        user: safeUser, 
+        token: impersonationToken,
+        tenant
+      });
+    } catch (error) {
+      console.error("Failed to impersonate tenant:", error);
+      res.status(500).json({ error: "Failed to impersonate tenant" });
     }
   });
 

@@ -9,6 +9,10 @@ interface AuthContextType {
   logout: () => void;
   updateUser: (user: User) => void;
   token: string | null;
+  isImpersonating: boolean;
+  originalSuperAdmin: User | null;
+  startImpersonation: (tenantUser: User, tenantToken: string, originalUser: User, originalToken: string) => void;
+  stopImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,18 +21,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [originalSuperAdmin, setOriginalSuperAdmin] = useState<User | null>(null);
+  const [originalToken, setOriginalToken] = useState<string | null>(null);
 
   useEffect(() => {
     const storedToken = localStorage.getItem("authToken");
     const storedUser = localStorage.getItem("authUser");
+    const storedOriginalSuperAdmin = localStorage.getItem("originalSuperAdmin");
+    const storedOriginalToken = localStorage.getItem("originalSuperAdminToken");
     
     if (storedToken && storedUser) {
       try {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
+        if (storedOriginalSuperAdmin && storedOriginalToken) {
+          setOriginalSuperAdmin(JSON.parse(storedOriginalSuperAdmin));
+          setOriginalToken(storedOriginalToken);
+        }
       } catch {
         localStorage.removeItem("authToken");
         localStorage.removeItem("authUser");
+        localStorage.removeItem("originalSuperAdmin");
+        localStorage.removeItem("originalSuperAdminToken");
       }
     }
     setIsLoading(false);
@@ -44,14 +58,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
+    setOriginalSuperAdmin(null);
+    setOriginalToken(null);
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
+    localStorage.removeItem("originalSuperAdmin");
+    localStorage.removeItem("originalSuperAdminToken");
   }, []);
 
   const updateUser = useCallback((updatedUser: User) => {
     setUser(updatedUser);
     localStorage.setItem("authUser", JSON.stringify(updatedUser));
   }, []);
+
+  const startImpersonation = useCallback((tenantUser: User, tenantToken: string, origUser: User, origToken: string) => {
+    setOriginalSuperAdmin(origUser);
+    setOriginalToken(origToken);
+    setUser(tenantUser);
+    setToken(tenantToken);
+    localStorage.setItem("authToken", tenantToken);
+    localStorage.setItem("authUser", JSON.stringify(tenantUser));
+    localStorage.setItem("originalSuperAdmin", JSON.stringify(origUser));
+    localStorage.setItem("originalSuperAdminToken", origToken);
+  }, []);
+
+  const stopImpersonation = useCallback(() => {
+    if (originalSuperAdmin && originalToken) {
+      setUser(originalSuperAdmin);
+      setToken(originalToken);
+      localStorage.setItem("authToken", originalToken);
+      localStorage.setItem("authUser", JSON.stringify(originalSuperAdmin));
+    }
+    setOriginalSuperAdmin(null);
+    setOriginalToken(null);
+    localStorage.removeItem("originalSuperAdmin");
+    localStorage.removeItem("originalSuperAdminToken");
+  }, [originalSuperAdmin, originalToken]);
 
   return (
     <AuthContext.Provider
@@ -63,6 +105,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateUser,
         token,
+        isImpersonating: !!originalSuperAdmin,
+        originalSuperAdmin,
+        startImpersonation,
+        stopImpersonation,
       }}
     >
       {children}

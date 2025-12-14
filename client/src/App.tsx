@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSelector } from "@/components/language-selector";
+import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 
 import NotFound from "@/pages/not-found";
@@ -110,8 +111,38 @@ function ProtectedRoutes() {
   );
 }
 
+function ImpersonationBanner() {
+  const { isImpersonating, originalSuperAdmin, stopImpersonation, user } = useAuth();
+  const [, setLocation] = useLocation();
+  const { t } = useTranslation();
+
+  if (!isImpersonating || !originalSuperAdmin) {
+    return null;
+  }
+
+  const handleSwitchBack = () => {
+    stopImpersonation();
+    setLocation("/tenants");
+  };
+
+  return (
+    <div className="bg-amber-500 dark:bg-amber-600 text-white px-4 py-2 flex items-center justify-between gap-4 flex-wrap">
+      <span className="text-sm font-medium" data-testid="text-impersonation-info">
+        {t("impersonation.viewingAs")}: {user?.firstName} {user?.lastName} ({user?.email})
+      </span>
+      <button
+        onClick={handleSwitchBack}
+        className="text-sm font-medium bg-white/20 px-3 py-1 rounded-md"
+        data-testid="button-switch-back"
+      >
+        {t("impersonation.switchBack")}
+      </button>
+    </div>
+  );
+}
+
 function AppLayout() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isImpersonating } = useAuth();
   
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -122,7 +153,7 @@ function AppLayout() {
     return <PublicRoutes />;
   }
 
-  if (user && !user.tenantId && user.role !== "super_admin") {
+  if (user && !user.tenantId && user.role !== "super_admin" && !isImpersonating) {
     return (
       <Switch>
         <Route path="/setup-tenant" component={SetupTenantPage} />
@@ -138,6 +169,7 @@ function AppLayout() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
+          <ImpersonationBanner />
           <header className="flex items-center justify-between gap-4 px-4 py-2 border-b bg-background sticky top-0 z-40">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">

@@ -265,6 +265,9 @@ const resources = {
         updateError: "Failed to update tenant",
         deleteSuccess: "Tenant deleted successfully",
         deleteError: "Failed to delete tenant",
+        viewAsTenant: "View as Tenant",
+        impersonateSuccess: "Now viewing as {{name}}",
+        impersonateError: "Failed to switch to tenant view",
       },
       settings: {
         title: "System Settings",
@@ -348,6 +351,10 @@ const resources = {
         testResults: "Test Results",
         testSuccess: "Connector test successful",
         testError: "Connector test failed",
+      },
+      impersonation: {
+        viewingAs: "Viewing as",
+        switchBack: "Switch Back to SuperAdmin",
       },
       common: {
         save: "Save",
@@ -663,6 +670,9 @@ const resources = {
         updateError: "Kiraci guncellenemedi",
         deleteSuccess: "Kiraci basariyla silindi",
         deleteError: "Kiraci silinemedi",
+        viewAsTenant: "Kiraci olarak gor",
+        impersonateSuccess: "Simdi {{name}} olarak goruntuleniyor",
+        impersonateError: "Kiraci gorunumune gecilemedi",
       },
       settings: {
         title: "Sistem Ayarlari",
@@ -746,6 +756,10 @@ const resources = {
         testResults: "Test Sonuclari",
         testSuccess: "Baglanti testi basarili",
         testError: "Baglanti testi basarisiz",
+      },
+      impersonation: {
+        viewingAs: "Goruntuleniyor",
+        switchBack: "SuperAdmin'e Don",
       },
       common: {
         save: "Kaydet",
