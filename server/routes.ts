@@ -1301,9 +1301,27 @@ export async function registerRoutes(
       if (existingTenant) {
         return res.status(400).json({ error: "Tenant slug already exists" });
       }
-      const tenant = await storage.createTenant({ name, slug });
+      
+      const generateTenantCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 8; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      };
+
+      let tenantCode = generateTenantCode();
+      let existingCodeTenant = await storage.getTenantByCode(tenantCode);
+      while (existingCodeTenant) {
+        tenantCode = generateTenantCode();
+        existingCodeTenant = await storage.getTenantByCode(tenantCode);
+      }
+      
+      const tenant = await storage.createTenant({ name, slug, code: tenantCode });
       res.json(tenant);
     } catch (error) {
+      console.error("Failed to create tenant:", error);
       res.status(500).json({ error: "Failed to create tenant" });
     }
   });

@@ -57,7 +57,7 @@ export default function TenantsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; slug: string }) => {
-      return apiRequest("/api/admin/tenants", { method: "POST", body: JSON.stringify(data) });
+      return apiRequest("POST", "/api/admin/tenants", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tenants"] });
@@ -72,7 +72,7 @@ export default function TenantsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Tenant> }) => {
-      return apiRequest(`/api/admin/tenants/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+      return apiRequest("PATCH", `/api/admin/tenants/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tenants"] });
@@ -87,7 +87,7 @@ export default function TenantsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest(`/api/admin/tenants/${id}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/admin/tenants/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tenants"] });
@@ -166,6 +166,7 @@ export default function TenantsPage() {
               <TableRow>
                 <TableHead>{t("tenants.name")}</TableHead>
                 <TableHead>{t("tenants.slug")}</TableHead>
+                <TableHead>{t("tenants.code")}</TableHead>
                 <TableHead>{t("tenants.users")}</TableHead>
                 <TableHead>{t("tenants.subscription")}</TableHead>
                 <TableHead>{t("tenants.createdAt")}</TableHead>
@@ -177,6 +178,11 @@ export default function TenantsPage() {
                 <TableRow key={tenant.id} data-testid={`row-tenant-${tenant.id}`}>
                   <TableCell className="font-medium">{tenant.name}</TableCell>
                   <TableCell className="text-muted-foreground">{tenant.slug}</TableCell>
+                  <TableCell>
+                    <code className="bg-muted px-2 py-1 rounded text-sm" data-testid={`text-tenant-code-${tenant.id}`}>
+                      {tenant.code || "-"}
+                    </code>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <Users className="h-4 w-4 text-muted-foreground" />
@@ -211,7 +217,7 @@ export default function TenantsPage() {
               ))}
               {(!tenants || tenants.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {t("tenants.noTenants")}
                   </TableCell>
                 </TableRow>

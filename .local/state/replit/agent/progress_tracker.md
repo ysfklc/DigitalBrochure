@@ -8,3 +8,4 @@
 [x] 8. Update frontend signup flow for create/join tenant options
 [x] 9. Make tenant code visible to both admins and users on Team Members page
 [x] 10. npm dependencies installed and workflow configured with webview on port 5000
+[x] 11. Fixed tsx not found issue by running npm install - application now running successfully
