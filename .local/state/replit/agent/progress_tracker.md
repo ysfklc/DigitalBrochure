@@ -77,3 +77,16 @@
     - Workflow configured with webview output on port 5000
     - Application running successfully - Express server serving on port 5000
     - Super admin user created successfully
+[x] 36. Environment migration finalized (December 15, 2025):
+    - All npm dependencies installed
+    - Database schema synced
+    - Workflow running on port 5000 with webview output
+    - Import complete
+[x] 37. Campaign Wizard Step 4 - Product Source Tabs (December 15, 2025):
+    - Added tabs to switch between "Existing Products" and "External Search" (connector products)
+    - Existing Products tab: Shows products from /api/products with local search filtering
+    - External Search tab: Uses /api/products/search to fetch products from enabled connectors
+    - Added debounced search (500ms) for connector product search
+    - Connector products display with badge showing source connector name
+    - Both product types can be selected and added to campaign
+    - Added i18n translations for English and Turkish

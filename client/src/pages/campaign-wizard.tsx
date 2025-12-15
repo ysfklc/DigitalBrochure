@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -11,7 +11,10 @@ import {
   Package,
   Check,
   Search,
-  Tag
+  Tag,
+  Globe,
+  Database,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Popover,
   PopoverContent,
@@ -38,6 +42,18 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import type { Template, Product, PriceTagTemplate } from "@shared/schema";
+
+interface ConnectorProduct {
+  id: string;
+  name: string;
+  price?: string | number;
+  discountPrice?: string | number;
+  imageUrl?: string;
+  sku?: string;
+  description?: string;
+  connectorId?: string;
+  connectorName?: string;
+}
 
 interface SelectedProduct {
   productId: string;
@@ -67,7 +83,18 @@ export default function CampaignWizardPage() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
+  const [connectorSearchQuery, setConnectorSearchQuery] = useState("");
+  const [debouncedConnectorSearch, setDebouncedConnectorSearch] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
+  const [productSourceTab, setProductSourceTab] = useState<"existing" | "connector">("existing");
+
+  // Debounce connector search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedConnectorSearch(connectorSearchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [connectorSearchQuery]);
 
   const { data: templates, isLoading: loadingTemplates } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
@@ -79,6 +106,26 @@ export default function CampaignWizardPage() {
 
   const { data: priceTagTemplates, isLoading: loadingPriceTags } = useQuery<PriceTagTemplate[]>({
     queryKey: ["/api/price-tag-templates"],
+  });
+
+  // Connector products search
+  const { data: connectorProducts, isLoading: loadingConnectorProducts, isFetching: fetchingConnectorProducts } = useQuery<ConnectorProduct[]>({
+    queryKey: ["/api/products/search", debouncedConnectorSearch],
+    queryFn: async () => {
+      if (!debouncedConnectorSearch.trim()) return [];
+      const token = localStorage.getItem("authToken");
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/products/search?q=${encodeURIComponent(debouncedConnectorSearch)}`, {
+        headers,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to search products");
+      return res.json();
+    },
+    enabled: debouncedConnectorSearch.length >= 2,
   });
 
   const filteredTemplates = templates?.filter(
@@ -190,6 +237,48 @@ export default function CampaignWizardPage() {
         },
       ]);
     }
+  };
+
+  const toggleConnectorProductSelection = (connectorProduct: ConnectorProduct) => {
+    // Create a pseudo product ID for connector products (prefixed to differentiate)
+    const productId = `connector_${connectorProduct.connectorId}_${connectorProduct.id}`;
+    const existing = selectedProducts.find((sp) => sp.productId === productId);
+    
+    if (existing) {
+      setSelectedProducts(selectedProducts.filter((sp) => sp.productId !== productId));
+    } else {
+      // Convert connector product to Product-like structure
+      const productData: Product = {
+        id: productId,
+        name: connectorProduct.name,
+        price: connectorProduct.price?.toString() || "0",
+        discountPrice: connectorProduct.discountPrice?.toString() || null,
+        imageUrl: connectorProduct.imageUrl || null,
+        sku: connectorProduct.sku || null,
+        description: connectorProduct.description || null,
+        category: null,
+        discountPercentage: null,
+        tenantId: null,
+        isGlobal: false,
+        createdAt: new Date(),
+      };
+      
+      setSelectedProducts([
+        ...selectedProducts,
+        {
+          productId,
+          product: productData,
+          campaignPrice: connectorProduct.price?.toString() || "",
+          campaignDiscountPrice: connectorProduct.discountPrice?.toString() || "",
+          priceTagTemplateId: null,
+        },
+      ]);
+    }
+  };
+
+  const isConnectorProductSelected = (connectorProduct: ConnectorProduct) => {
+    const productId = `connector_${connectorProduct.connectorId}_${connectorProduct.id}`;
+    return selectedProducts.some((sp) => sp.productId === productId);
   };
 
   const updateProductPrice = (productId: string, field: "campaignPrice" | "campaignDiscountPrice", value: string) => {
@@ -432,62 +521,152 @@ export default function CampaignWizardPage() {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={t("products.search")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-              data-testid="input-search-products"
-            />
-          </div>
-          
-          <ScrollArea className="h-[400px] border rounded-lg p-4">
-            {loadingProducts ? (
-              <div className="space-y-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
+          <Tabs value={productSourceTab} onValueChange={(v) => setProductSourceTab(v as "existing" | "connector")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="existing" className="flex items-center gap-2" data-testid="tab-existing-products">
+                <Database className="w-4 h-4" />
+                {t("wizard.existingProducts")}
+              </TabsTrigger>
+              <TabsTrigger value="connector" className="flex items-center gap-2" data-testid="tab-connector-products">
+                <Globe className="w-4 h-4" />
+                {t("wizard.connectorProducts")}
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="existing" className="space-y-4 mt-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t("products.search")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-products"
+                />
               </div>
-            ) : filteredProducts?.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Package className="w-8 h-8 mx-auto mb-2" />
-                <p>{t("products.noProducts")}</p>
+              
+              <ScrollArea className="h-[350px] border rounded-lg p-4">
+                {loadingProducts ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : filteredProducts?.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Package className="w-8 h-8 mx-auto mb-2" />
+                    <p>{t("products.noProducts")}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredProducts?.map((product) => {
+                      const isSelected = selectedProducts.some((sp) => sp.productId === product.id);
+                      return (
+                        <div
+                          key={product.id}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            isSelected ? "bg-primary/10 border-primary" : "hover:bg-muted"
+                          }`}
+                          onClick={() => toggleProductSelection(product)}
+                          data-testid={`product-item-${product.id}`}
+                        >
+                          <Checkbox checked={isSelected} />
+                          {product.imageUrl && (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="w-12 h-12 object-cover rounded"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{product.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {product.price ? `$${product.price}` : "-"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+            
+            <TabsContent value="connector" className="space-y-4 mt-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t("wizard.searchConnectorProducts")}
+                  value={connectorSearchQuery}
+                  onChange={(e) => setConnectorSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-connector-products"
+                />
+                {fetchingConnectorProducts && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
               </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredProducts?.map((product) => {
-                  const isSelected = selectedProducts.some((sp) => sp.productId === product.id);
-                  return (
-                    <div
-                      key={product.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        isSelected ? "bg-primary/10 border-primary" : "hover:bg-muted"
-                      }`}
-                      onClick={() => toggleProductSelection(product)}
-                      data-testid={`product-item-${product.id}`}
-                    >
-                      <Checkbox checked={isSelected} />
-                      {product.imageUrl && (
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          className="w-12 h-12 object-cover rounded"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{product.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {product.price ? `$${product.price}` : "-"}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </ScrollArea>
+              
+              <ScrollArea className="h-[350px] border rounded-lg p-4">
+                {!debouncedConnectorSearch ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Globe className="w-8 h-8 mx-auto mb-2" />
+                    <p>{t("wizard.enterSearchQuery")}</p>
+                    <p className="text-xs mt-1">{t("wizard.minCharacters")}</p>
+                  </div>
+                ) : loadingConnectorProducts ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : connectorProducts?.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Package className="w-8 h-8 mx-auto mb-2" />
+                    <p>{t("wizard.noConnectorProducts")}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {connectorProducts?.map((product) => {
+                      const isSelected = isConnectorProductSelected(product);
+                      return (
+                        <div
+                          key={`${product.connectorId}_${product.id}`}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            isSelected ? "bg-primary/10 border-primary" : "hover:bg-muted"
+                          }`}
+                          onClick={() => toggleConnectorProductSelection(product)}
+                          data-testid={`connector-product-item-${product.id}`}
+                        >
+                          <Checkbox checked={isSelected} />
+                          {product.imageUrl && (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="w-12 h-12 object-cover rounded"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium truncate">{product.name}</p>
+                              {product.connectorName && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {product.connectorName}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {product.price ? `$${product.price}` : "-"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </div>
         
         <div className="space-y-4">
