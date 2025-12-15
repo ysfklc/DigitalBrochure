@@ -225,6 +225,21 @@ export default function CampaignEditorPage() {
     queryKey: ["/api/templates"],
   });
 
+  // Fetch campaign products to place them on the canvas
+  const { data: campaignProducts } = useQuery<any[]>({
+    queryKey: ["/api/campaigns", id, "products"],
+    queryFn: async () => {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(`/api/campaigns/${id}/products`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch campaign products");
+      return res.json();
+    },
+    enabled: !!id && id !== "new",
+  });
+
   const filteredProducts = products?.filter((product) =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -237,22 +252,84 @@ export default function CampaignEditorPage() {
     })),
   ];
 
+  const initialDataLoadedRef = useRef(false);
+  
   useEffect(() => {
-    if (campaign) {
+    // Only load initial data once when both campaign and campaignProducts are ready
+    if (campaign && !initialDataLoadedRef.current) {
       setCampaignName(campaign.name);
       setSavedCampaignId(campaign.id);
+      
+      // Wait for campaignProducts to be loaded if id is not "new"
+      if (id !== "new" && campaignProducts === undefined) {
+        return; // Wait for products to load
+      }
+      
+      initialDataLoadedRef.current = true;
+      
       if (campaign.canvasData) {
         const data = campaign.canvasData as any;
-        if (data.elements) setCanvasElements(data.elements);
+        let elements = data.elements || [];
+        
+        // Merge campaign products as canvas elements if they're not already in the canvas
+        if (campaignProducts && campaignProducts.length > 0) {
+          const existingProductIds = new Set(
+            elements.filter((el: any) => el.type === 'product').map((el: any) => el.data?.productId)
+          );
+          
+          const productElements = campaignProducts
+            .filter((cp: any) => !existingProductIds.has(cp.productId))
+            .map((cp: any, index: number) => ({
+              id: `campaign-product-${cp.id}`, // Use stable ID based on campaign product ID
+              type: 'product' as const,
+              x: cp.positionX || (50 + (index % 3) * 150),
+              y: cp.positionY || (50 + Math.floor(index / 3) * 180),
+              width: cp.width || 120,
+              height: cp.height || 140,
+              rotation: 0,
+              opacity: 1,
+              page: cp.pageNumber || 1,
+              data: {
+                productId: cp.productId,
+                product: cp.product,
+                campaignPrice: cp.campaignPrice,
+                campaignDiscountPrice: cp.campaignDiscountPrice,
+              },
+            }));
+          
+          elements = [...elements, ...productElements];
+        }
+        
+        setCanvasElements(elements);
         if (data.canvasSize) setCanvasSize(data.canvasSize);
         if (data.totalPages) setTotalPages(data.totalPages);
         if (data.headerHeight !== undefined) setHeaderHeight(data.headerHeight);
         if (data.footerHeight !== undefined) setFooterHeight(data.footerHeight);
         if (data.showHeaderZone !== undefined) setShowHeaderZone(data.showHeaderZone);
         if (data.showFooterZone !== undefined) setShowFooterZone(data.showFooterZone);
+      } else if (campaignProducts && campaignProducts.length > 0) {
+        // No canvas data but we have products - create product elements
+        const productElements = campaignProducts.map((cp: any, index: number) => ({
+          id: `campaign-product-${cp.id}`, // Use stable ID based on campaign product ID
+          type: 'product' as const,
+          x: cp.positionX || (50 + (index % 3) * 150),
+          y: cp.positionY || (50 + Math.floor(index / 3) * 180),
+          width: cp.width || 120,
+          height: cp.height || 140,
+          rotation: 0,
+          opacity: 1,
+          page: cp.pageNumber || 1,
+          data: {
+            productId: cp.productId,
+            product: cp.product,
+            campaignPrice: cp.campaignPrice,
+            campaignDiscountPrice: cp.campaignDiscountPrice,
+          },
+        }));
+        setCanvasElements(productElements);
       }
     }
-  }, [campaign]);
+  }, [campaign, campaignProducts, id]);
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: any) => {

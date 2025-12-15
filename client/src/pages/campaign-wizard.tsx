@@ -61,6 +61,7 @@ interface SelectedProduct {
   campaignPrice: string;
   campaignDiscountPrice: string;
   priceTagTemplateId: string | null;
+  isExternal?: boolean;
 }
 
 const STEPS = [
@@ -153,6 +154,19 @@ export default function CampaignWizardPage() {
             positionY: 50 + Math.floor(index / 3) * 180,
             width: 120,
             height: 140,
+            isExternal: sp.isExternal || false,
+            externalProductData: sp.isExternal ? {
+              name: sp.product.name,
+              description: sp.product.description,
+              barcode: (sp.product as any).barcode || null,
+              sku: sp.product.sku,
+              category: sp.product.category,
+              price: sp.product.price,
+              discountPrice: sp.product.discountPrice,
+              currency: (sp.product as any).currency || "TRY",
+              imageUrl: sp.product.imageUrl,
+              unit: (sp.product as any).unit || null,
+            } : undefined,
           })),
         });
       }
@@ -271,6 +285,7 @@ export default function CampaignWizardPage() {
           campaignPrice: connectorProduct.price?.toString() || "",
           campaignDiscountPrice: connectorProduct.discountPrice?.toString() || "",
           priceTagTemplateId: null,
+          isExternal: true,
         },
       ]);
     }

@@ -917,11 +917,25 @@ export async function registerRoutes(
       if (!req.user!.tenantId) {
         return res.status(400).json({ error: "You must belong to an organization to create campaigns" });
       }
-      const data = insertCampaignSchema.parse({
+      
+      // If a template is selected, copy its canvas data to the campaign
+      let canvasData = req.body.canvasData || null;
+      if (req.body.templateId && !canvasData) {
+        const template = await storage.getTemplate(req.body.templateId);
+        if (template && template.coverPageConfig) {
+          canvasData = template.coverPageConfig;
+        }
+      }
+      
+      const body = {
         ...req.body,
         tenantId: req.user!.tenantId,
-        createdBy: req.user!.id
-      });
+        createdBy: req.user!.id,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
+        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
+        canvasData
+      };
+      const data = insertCampaignSchema.parse(body);
       const campaign = await storage.createCampaign(data);
       res.json(campaign);
     } catch (error) {
@@ -938,7 +952,12 @@ export async function registerRoutes(
       if (!campaign || campaign.tenantId !== req.user!.tenantId) {
         return res.status(404).json({ error: "Campaign not found" });
       }
-      const updated = await storage.updateCampaign(req.params.id, req.body);
+      const body = {
+        ...req.body,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
+        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined
+      };
+      const updated = await storage.updateCampaign(req.params.id, body);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update campaign" });
@@ -965,7 +984,28 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Campaign not found" });
       }
       const campaignProducts = await storage.getCampaignProducts(req.params.id);
-      res.json(campaignProducts);
+      
+      // Fetch product details for each campaign product in parallel
+      const productsWithDetails = await Promise.all(
+        campaignProducts.map(async (cp) => {
+          try {
+            const product = await storage.getProduct(cp.productId);
+            return {
+              ...cp,
+              product: product || null,
+            };
+          } catch (error) {
+            console.error(`Failed to fetch product ${cp.productId}:`, error);
+            return {
+              ...cp,
+              product: null,
+            };
+          }
+        })
+      );
+      
+      // Filter out entries with missing products to avoid issues
+      res.json(productsWithDetails.filter(cp => cp.product !== null));
     } catch (error) {
       res.status(500).json({ error: "Failed to get campaign products" });
     }
@@ -1008,9 +1048,27 @@ export async function registerRoutes(
       const { products } = req.body;
       const createdProducts = [];
       for (const product of products) {
+        let productId = product.productId;
+        
+        // Check if this is an external/connector product that needs to be created first
+        if (product.isExternal && product.externalProductData) {
+          // Create the external product in the local database
+          const newProduct = await storage.createProduct({
+            tenantId: req.user!.tenantId!,
+            name: product.externalProductData.name || "External Product",
+            description: product.externalProductData.description || null,
+            sku: product.externalProductData.sku || null,
+            category: product.externalProductData.category || "External",
+            price: product.externalProductData.price?.toString() || "0",
+            discountPrice: product.externalProductData.discountPrice?.toString() || null,
+            imageUrl: product.externalProductData.imageUrl || null,
+          });
+          productId = newProduct.id;
+        }
+        
         const campaignProduct = await storage.addCampaignProduct({
           campaignId: req.params.id,
-          productId: product.productId,
+          productId: productId,
           campaignPrice: product.campaignPrice,
           campaignDiscountPrice: product.campaignDiscountPrice,
           priceTagTemplateId: product.priceTagTemplateId,
