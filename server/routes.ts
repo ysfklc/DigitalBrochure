@@ -996,6 +996,95 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/campaigns/:id/products", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign || campaign.tenantId !== req.user!.tenantId) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      
+      await storage.clearCampaignProducts(req.params.id);
+      
+      const { products } = req.body;
+      const createdProducts = [];
+      for (const product of products) {
+        const campaignProduct = await storage.addCampaignProduct({
+          campaignId: req.params.id,
+          productId: product.productId,
+          campaignPrice: product.campaignPrice,
+          campaignDiscountPrice: product.campaignDiscountPrice,
+          priceTagTemplateId: product.priceTagTemplateId,
+          positionX: product.positionX,
+          positionY: product.positionY,
+          width: product.width,
+          height: product.height,
+          pageNumber: product.pageNumber || 1
+        });
+        createdProducts.push(campaignProduct);
+      }
+      
+      res.json(createdProducts);
+    } catch (error) {
+      console.error("Failed to update campaign products:", error);
+      res.status(500).json({ error: "Failed to update campaign products" });
+    }
+  });
+
+  app.get("/api/price-tag-templates", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      const templates = await storage.getPriceTagTemplatesByTenant(req.user!.tenantId!);
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get price tag templates" });
+    }
+  });
+
+  app.get("/api/price-tag-templates/:id", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      const template = await storage.getPriceTagTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Price tag template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get price tag template" });
+    }
+  });
+
+  app.post("/api/price-tag-templates", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      const template = await storage.createPriceTagTemplate({
+        ...req.body,
+        tenantId: req.user!.tenantId
+      });
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create price tag template" });
+    }
+  });
+
+  app.patch("/api/price-tag-templates/:id", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      const template = await storage.getPriceTagTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Price tag template not found" });
+      }
+      const updated = await storage.updatePriceTagTemplate(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update price tag template" });
+    }
+  });
+
+  app.delete("/api/price-tag-templates/:id", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.deletePriceTagTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete price tag template" });
+    }
+  });
+
   app.get("/api/messages", authenticate, async (req: AuthRequest, res: Response) => {
     try {
       const { type } = req.query;

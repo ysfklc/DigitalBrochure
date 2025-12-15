@@ -2,14 +2,15 @@ import { eq, and, or, desc, ilike, ne, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, products, templates,
-  campaigns, campaignProducts, messages, suggestions, tutorials, systemConfig, productConnectors, joinRequests,
+  campaigns, campaignProducts, messages, suggestions, tutorials, systemConfig, productConnectors, joinRequests, priceTagTemplates,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Product, type InsertProduct,
   type Template, type InsertTemplate, type Campaign, type InsertCampaign,
   type CampaignProduct, type InsertCampaignProduct, type Message, type InsertMessage,
   type Suggestion, type InsertSuggestion, type Tutorial, type InsertTutorial,
   type SystemConfig, type InsertSystemConfig, type ProductConnector, type InsertProductConnector,
-  type JoinRequest, type InsertJoinRequest
+  type JoinRequest, type InsertJoinRequest,
+  type PriceTagTemplate, type InsertPriceTagTemplate
 } from "@shared/schema";
 
 export interface IStorage {
@@ -91,6 +92,16 @@ export interface IStorage {
   deleteProductConnector(id: string): Promise<boolean>;
 
   getTenantByCode(code: string): Promise<Tenant | undefined>;
+
+  getPriceTagTemplate(id: string): Promise<PriceTagTemplate | undefined>;
+  getPriceTagTemplatesByTenant(tenantId: string): Promise<PriceTagTemplate[]>;
+  getGlobalPriceTagTemplates(): Promise<PriceTagTemplate[]>;
+  createPriceTagTemplate(template: InsertPriceTagTemplate): Promise<PriceTagTemplate>;
+  updatePriceTagTemplate(id: string, data: Partial<InsertPriceTagTemplate>): Promise<PriceTagTemplate | undefined>;
+  deletePriceTagTemplate(id: string): Promise<boolean>;
+
+  updateCampaignProduct(id: string, data: Partial<InsertCampaignProduct>): Promise<CampaignProduct | undefined>;
+  clearCampaignProducts(campaignId: string): Promise<boolean>;
   
   getJoinRequest(id: string): Promise<JoinRequest | undefined>;
   getJoinRequestsByTenant(tenantId: string): Promise<JoinRequest[]>;
@@ -513,6 +524,46 @@ export class DatabaseStorage implements IStorage {
 
   async deleteJoinRequest(id: string): Promise<boolean> {
     await db.delete(joinRequests).where(eq(joinRequests.id, id));
+    return true;
+  }
+
+  async getPriceTagTemplate(id: string): Promise<PriceTagTemplate | undefined> {
+    const [template] = await db.select().from(priceTagTemplates).where(eq(priceTagTemplates.id, id));
+    return template;
+  }
+
+  async getPriceTagTemplatesByTenant(tenantId: string): Promise<PriceTagTemplate[]> {
+    return db.select().from(priceTagTemplates).where(
+      or(eq(priceTagTemplates.tenantId, tenantId), eq(priceTagTemplates.isGlobal, true))
+    ).orderBy(desc(priceTagTemplates.createdAt));
+  }
+
+  async getGlobalPriceTagTemplates(): Promise<PriceTagTemplate[]> {
+    return db.select().from(priceTagTemplates).where(eq(priceTagTemplates.isGlobal, true));
+  }
+
+  async createPriceTagTemplate(template: InsertPriceTagTemplate): Promise<PriceTagTemplate> {
+    const [created] = await db.insert(priceTagTemplates).values(template).returning();
+    return created;
+  }
+
+  async updatePriceTagTemplate(id: string, data: Partial<InsertPriceTagTemplate>): Promise<PriceTagTemplate | undefined> {
+    const [updated] = await db.update(priceTagTemplates).set(data).where(eq(priceTagTemplates.id, id)).returning();
+    return updated;
+  }
+
+  async deletePriceTagTemplate(id: string): Promise<boolean> {
+    await db.delete(priceTagTemplates).where(eq(priceTagTemplates.id, id));
+    return true;
+  }
+
+  async updateCampaignProduct(id: string, data: Partial<InsertCampaignProduct>): Promise<CampaignProduct | undefined> {
+    const [updated] = await db.update(campaignProducts).set(data).where(eq(campaignProducts.id, id)).returning();
+    return updated;
+  }
+
+  async clearCampaignProducts(campaignId: string): Promise<boolean> {
+    await db.delete(campaignProducts).where(eq(campaignProducts.campaignId, campaignId));
     return true;
   }
 }

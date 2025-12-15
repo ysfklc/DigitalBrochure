@@ -102,6 +102,7 @@ export const campaigns = pgTable("campaigns", {
   templateId: varchar("template_id").references(() => templates.id),
   name: text("name").notNull(),
   description: text("description"),
+  type: templateTypeEnum("type"),
   status: campaignStatusEnum("status").notNull().default("draft"),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
@@ -111,10 +112,23 @@ export const campaigns = pgTable("campaigns", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const priceTagTemplates = pgTable("price_tag_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id),
+  name: text("name").notNull(),
+  designConfig: jsonb("design_config"),
+  thumbnailUrl: text("thumbnail_url"),
+  isGlobal: boolean("is_global").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const campaignProducts = pgTable("campaign_products", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   campaignId: varchar("campaign_id").references(() => campaigns.id).notNull(),
   productId: varchar("product_id").references(() => products.id).notNull(),
+  campaignPrice: decimal("campaign_price", { precision: 10, scale: 2 }),
+  campaignDiscountPrice: decimal("campaign_discount_price", { precision: 10, scale: 2 }),
+  priceTagTemplateId: varchar("price_tag_template_id").references(() => priceTagTemplates.id),
   positionX: integer("position_x"),
   positionY: integer("position_y"),
   width: integer("width"),
@@ -223,9 +237,15 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
   campaignProducts: many(campaignProducts),
 }));
 
+export const priceTagTemplatesRelations = relations(priceTagTemplates, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [priceTagTemplates.tenantId], references: [tenants.id] }),
+  campaignProducts: many(campaignProducts),
+}));
+
 export const campaignProductsRelations = relations(campaignProducts, ({ one }) => ({
   campaign: one(campaigns, { fields: [campaignProducts.campaignId], references: [campaigns.id] }),
   product: one(products, { fields: [campaignProducts.productId], references: [products.id] }),
+  priceTagTemplate: one(priceTagTemplates, { fields: [campaignProducts.priceTagTemplateId], references: [priceTagTemplates.id] }),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -246,6 +266,7 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
 export const insertTemplateSchema = createInsertSchema(templates).omit({ id: true, createdAt: true });
 export const insertCampaignSchema = createInsertSchema(campaigns).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPriceTagTemplateSchema = createInsertSchema(priceTagTemplates).omit({ id: true, createdAt: true });
 export const insertCampaignProductSchema = createInsertSchema(campaignProducts).omit({ id: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertSuggestionSchema = createInsertSchema(suggestions).omit({ id: true, createdAt: true });
@@ -267,6 +288,8 @@ export type Template = typeof templates.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 export type Campaign = typeof campaigns.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
+export type PriceTagTemplate = typeof priceTagTemplates.$inferSelect;
+export type InsertPriceTagTemplate = z.infer<typeof insertPriceTagTemplateSchema>;
 export type CampaignProduct = typeof campaignProducts.$inferSelect;
 export type InsertCampaignProduct = z.infer<typeof insertCampaignProductSchema>;
 export type Message = typeof messages.$inferSelect;
