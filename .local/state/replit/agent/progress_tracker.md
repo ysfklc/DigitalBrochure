@@ -97,3 +97,14 @@
     - Application running successfully - Express server serving on port 5000
     - Super admin user created successfully
     - All previous tasks verified complete
+[x] 39. Environment migration completed (December 15, 2025):
+    - npm install executed successfully
+    - Database schema pushed successfully
+    - Workflow running on port 5000 with webview output
+    - Super admin user created successfully
+    - All systems operational
+[x] 40. Fixed selected products auto-add to canvas (December 15, 2025):
+    - Fixed renderElement function in campaign-editor.tsx to handle both data structures
+    - Products from wizard now properly display on canvas (handles nested product data structure)
+    - Products from drag-drop also still work (handles direct data structure)
+    - Campaign price and discount price properly shown from campaign-specific values

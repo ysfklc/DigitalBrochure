@@ -103,6 +103,7 @@ function ProtectedRoutes() {
       <Route path="/campaigns" component={() => <ProtectedRoute component={CampaignsPage} />} />
       <Route path="/campaigns/new" component={() => <ProtectedRoute component={CampaignWizardPage} />} />
       <Route path="/campaigns/:id/edit" component={() => <ProtectedRoute component={CampaignEditorPage} />} />
+      <Route path="/campaigns/:id" component={() => <ProtectedRoute component={CampaignEditorPage} />} />
       <Route path="/sharing" component={() => <ProtectedRoute component={SharingPage} />} />
       <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
       <Route path="/suggestions" component={() => <ProtectedRoute component={SuggestionsPage} />} />

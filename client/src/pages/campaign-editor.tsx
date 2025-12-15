@@ -287,7 +287,7 @@ export default function CampaignEditorPage() {
               width: cp.width || 120,
               height: cp.height || 140,
               rotation: 0,
-              opacity: 1,
+              opacity: 100,
               page: cp.pageNumber || 1,
               data: {
                 productId: cp.productId,
@@ -317,7 +317,7 @@ export default function CampaignEditorPage() {
           width: cp.width || 120,
           height: cp.height || 140,
           rotation: 0,
-          opacity: 1,
+          opacity: 100,
           page: cp.pageNumber || 1,
           data: {
             productId: cp.productId,
@@ -810,13 +810,20 @@ export default function CampaignEditorPage() {
     const scale = inPreview ? 0.4 : zoom / 100;
     
     if (element.type === 'product') {
+      // Handle both structures: direct product data and nested product data
+      const productData = element.data.product || element.data;
+      const imageUrl = productData.imageUrl;
+      const name = productData.name;
+      const price = element.data.campaignPrice || productData.price;
+      const discountPrice = element.data.campaignDiscountPrice || productData.discountPrice;
+      
       return (
         <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col">
           <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
-            {element.data.imageUrl ? (
+            {imageUrl ? (
               <img
-                src={element.data.imageUrl}
-                alt={element.data.name}
+                src={imageUrl}
+                alt={name}
                 className="w-full h-full object-cover"
                 draggable={false}
               />
@@ -825,9 +832,9 @@ export default function CampaignEditorPage() {
             )}
           </div>
           <div className="p-1 text-center bg-background">
-            <p className="text-xs font-medium truncate">{element.data.name}</p>
+            <p className="text-xs font-medium truncate">{name}</p>
             <p className="text-xs text-primary font-bold">
-              ${element.data.discountPrice || element.data.price}
+              ${discountPrice || price}
             </p>
           </div>
         </div>
