@@ -1,0 +1,196 @@
+import fs from "fs-extra";
+import sharp from "sharp";
+import { removeBackground } from "@imgly/background-removal-node";
+
+/* ---------------------------------------
+   Helpers
+--------------------------------------- */
+async function removeBg(inputPath) {
+  const buffer = await fs.readFile(inputPath);
+  const result = await removeBackground(buffer);
+  return sharp(result).png();
+}
+
+async function canvas(width, height) {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  });
+}
+
+async function softShadow(buffer, opacity = 0.15, blur = 25) {
+  return sharp(buffer)
+    .clone()
+    .blur(blur)
+    .modulate({ brightness: 0 })
+    .ensureAlpha(opacity)
+    .toBuffer();
+}
+
+/* ---------------------------------------
+   PRESETS
+--------------------------------------- */
+
+async function clean_center(img) {
+  const meta = await img.metadata();
+  const W = Math.round(meta.width * 1.6);
+  const H = Math.round(meta.height * 1.4);
+
+  const buf = await img.toBuffer();
+  const shadow = await softShadow(buf);
+
+  return (await canvas(W, H)).composite([
+    {
+      input: shadow,
+      left: Math.round(W / 2 - meta.width / 2 + 10),
+      top: Math.round(H / 2 - meta.height / 2 + 20),
+    },
+    {
+      input: buf,
+      left: Math.round(W / 2 - meta.width / 2),
+      top: Math.round(H / 2 - meta.height / 2),
+    },
+  ]);
+}
+
+async function clean_offset(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+  const W = Math.round(meta.width * 1.8);
+  const H = Math.round(meta.height * 1.4);
+
+  return (await canvas(W, H)).composite([
+    {
+      input: buf,
+      left: Math.round(W * 0.15),
+      top: Math.round(H / 2 - meta.height / 2),
+    },
+  ]);
+}
+
+async function editorial_left(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+
+  return (await canvas(Math.round(meta.width * 2), Math.round(meta.height * 1.4)))
+    .composite([
+      {
+        input: buf,
+        left: Math.round(meta.width * 0.15),
+        top: Math.round(meta.height * 0.2),
+      },
+    ]);
+}
+
+async function editorial_right(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+
+  return (await canvas(Math.round(meta.width * 2), Math.round(meta.height * 1.4)))
+    .composite([
+      {
+        input: buf,
+        left: Math.round(meta.width * 0.8),
+        top: Math.round(meta.height * 0.2),
+      },
+    ]);
+}
+
+async function product_duo_depth(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+  const small = await sharp(buf)
+    .resize({ width: Math.round(meta.width * 0.92) })
+    .toBuffer();
+
+  return (await canvas(1200, 900)).composite([
+    { input: small, left: 80, top: 120, opacity: 0.85 },
+    { input: buf, left: 140, top: 60 },
+  ]);
+}
+
+async function minimal_motion(img) {
+  const buf = await img.toBuffer();
+  return (await canvas(1200, 800)).composite([
+    { input: buf, left: 40, top: 40, opacity: 0.35 },
+    { input: buf, left: 120, top: 40 },
+  ]);
+}
+
+async function side_by_side(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+
+  return (await canvas(meta.width * 2, meta.height)).composite([
+    { input: buf, left: 0, top: 0 },
+    { input: buf, left: meta.width, top: 0 },
+  ]);
+}
+
+async function overlap_left(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+
+  return (await canvas(meta.width * 2, meta.height)).composite([
+    { input: buf, left: 0, top: 0 },
+    { input: buf, left: Math.round(meta.width * 0.6), top: 0 },
+  ]);
+}
+
+async function overlap_right(img) {
+  const meta = await img.metadata();
+  const buf = await img.toBuffer();
+
+  return (await canvas(meta.width * 2, meta.height)).composite([
+    { input: buf, left: 0, top: 0 },
+    { input: buf, left: Math.round(meta.width * 0.4), top: 0 },
+  ]);
+}
+
+/* ---------------------------------------
+   PRESET MAP
+--------------------------------------- */
+const PRESETS = {
+  clean_center,
+  clean_offset,
+  editorial_left,
+  editorial_right,
+  product_duo_depth,
+  minimal_motion,
+  side_by_side,
+  overlap_left,
+  overlap_right,
+};
+
+/* ---------------------------------------
+   PUBLIC API
+--------------------------------------- */
+export async function generatePoster({
+  inputPath,
+  outputDir,
+  preset,
+  presets,
+}) {
+  await fs.ensureDir(outputDir);
+
+  const cleanImg = await removeBg(inputPath);
+
+  const list =
+    preset ? [preset] :
+    presets ? presets :
+    Object.keys(PRESETS);
+
+  for (const name of list) {
+    const fn = PRESETS[name];
+    if (!fn) throw new Error(`Unknown preset: ${name}`);
+
+    const composed = await fn(cleanImg);
+    await composed.png().toFile(`${outputDir}/${name}.png`);
+  }
+
+  return list;
+}
