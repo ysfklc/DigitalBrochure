@@ -108,3 +108,30 @@
     - Products from wizard now properly display on canvas (handles nested product data structure)
     - Products from drag-drop also still work (handles direct data structure)
     - Campaign price and discount price properly shown from campaign-specific values
+[x] 41. Environment migration completed (December 16, 2025):
+    - npm install executed successfully
+    - Database schema pushed (no changes detected)
+    - Workflow configured with webview output on port 5000
+    - Application running successfully - Express server serving on port 5000
+    - Super admin user created successfully
+[x] 42. Image Background Removal & Preset Feature (December 16, 2025):
+    - Installed @imgly/background-removal-node, sharp, fs-extra packages
+    - Created server/image-processing.ts with:
+      - Background removal using @imgly/background-removal-node
+      - 9 image layout presets (clean_center, clean_offset, editorial_left/right, duo_depth, minimal_motion, side_by_side, overlap_left/right)
+      - Support for both local files and remote URLs with 30s timeout
+      - SSRF protection with URL validation (blocked localhost, local IPs)
+    - Added API endpoints:
+      - GET /api/image-processing/presets - list available presets
+      - POST /api/image-processing/remove-background - remove image background
+      - POST /api/image-processing/apply-preset - apply preset to image
+    - Updated campaign-editor.tsx:
+      - Added dropdown menu on product images (appears on hover)
+      - "Remove Background" option for instant background removal
+      - "Apply Preset" submenu with all 9 preset options
+      - Loading spinner while processing
+    - Added i18n translations for EN/TR:
+      - imageActions, removeBackground, applyPreset
+      - backgroundRemoved, backgroundRemovalFailed
+      - presetApplied, presetApplyFailed
+      - All 9 preset names

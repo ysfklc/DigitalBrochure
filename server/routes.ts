@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { generateActivationToken, getActivationTokenExpiry, sendActivationEmail } from "./email";
+import { getAvailablePresets, removeBackgroundFromUrl, applyPresetFromUrl } from "./image-processing";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -160,6 +161,83 @@ export async function registerRoutes(
     }
     const fileUrl = `/uploads/${req.file.filename}`;
     res.json({ url: fileUrl });
+  });
+
+  const isValidImageUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url, `http://localhost`);
+      if (url.startsWith('/uploads/')) {
+        return true;
+      }
+      const allowedProtocols = ['http:', 'https:'];
+      if (!allowedProtocols.includes(parsed.protocol)) {
+        return false;
+      }
+      const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'];
+      if (blockedHosts.some(h => parsed.hostname.includes(h))) {
+        return url.startsWith('/uploads/');
+      }
+      return true;
+    } catch {
+      return url.startsWith('/uploads/');
+    }
+  };
+
+  app.get("/api/image-processing/presets", authenticate, (_req: AuthRequest, res: Response) => {
+    const presets = getAvailablePresets();
+    res.json({ presets });
+  });
+
+  app.post("/api/image-processing/remove-background", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { imageUrl } = req.body;
+      if (!imageUrl) {
+        return res.status(400).json({ error: "Image URL is required" });
+      }
+
+      if (!isValidImageUrl(imageUrl)) {
+        return res.status(400).json({ error: "Invalid image URL" });
+      }
+
+      const resolvedUrl = imageUrl.startsWith('/uploads/') 
+        ? path.join(uploadsDir, imageUrl.replace('/uploads/', ''))
+        : imageUrl;
+
+      const outputPath = await removeBackgroundFromUrl(resolvedUrl, uploadsDir);
+      const fileName = path.basename(outputPath);
+      const resultUrl = `/uploads/${fileName}`;
+      
+      res.json({ url: resultUrl, success: true });
+    } catch (error) {
+      console.error("Background removal error:", error);
+      res.status(500).json({ error: "Failed to remove background" });
+    }
+  });
+
+  app.post("/api/image-processing/apply-preset", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { imageUrl, preset } = req.body;
+      if (!imageUrl || !preset) {
+        return res.status(400).json({ error: "Image URL and preset are required" });
+      }
+
+      if (!isValidImageUrl(imageUrl)) {
+        return res.status(400).json({ error: "Invalid image URL" });
+      }
+
+      const resolvedUrl = imageUrl.startsWith('/uploads/') 
+        ? path.join(uploadsDir, imageUrl.replace('/uploads/', ''))
+        : imageUrl;
+
+      const outputPath = await applyPresetFromUrl(resolvedUrl, preset, uploadsDir);
+      const fileName = path.basename(outputPath);
+      const resultUrl = `/uploads/${fileName}`;
+      
+      res.json({ url: resultUrl, success: true });
+    } catch (error) {
+      console.error("Preset application error:", error);
+      res.status(500).json({ error: "Failed to apply preset" });
+    }
   });
 
   app.post("/api/auth/register", async (req: Request, res: Response) => {

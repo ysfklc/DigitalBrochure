@@ -78,7 +78,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { MoreVertical, Wand2, Loader2 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Campaign, Product, Template } from "@shared/schema";
@@ -197,6 +209,117 @@ export default function CampaignEditorPage() {
   const [showFooterZone, setShowFooterZone] = useState(true);
   const [headerHeight, setHeaderHeight] = useState(80);
   const [footerHeight, setFooterHeight] = useState(60);
+  const [processingElementId, setProcessingElementId] = useState<string | null>(null);
+
+  const IMAGE_PRESETS = [
+    { id: 'clean_center', label: t('editor.presetCleanCenter') },
+    { id: 'clean_offset', label: t('editor.presetCleanOffset') },
+    { id: 'editorial_left', label: t('editor.presetEditorialLeft') },
+    { id: 'editorial_right', label: t('editor.presetEditorialRight') },
+    { id: 'product_duo_depth', label: t('editor.presetDuoDepth') },
+    { id: 'minimal_motion', label: t('editor.presetMinimalMotion') },
+    { id: 'side_by_side', label: t('editor.presetSideBySide') },
+    { id: 'overlap_left', label: t('editor.presetOverlapLeft') },
+    { id: 'overlap_right', label: t('editor.presetOverlapRight') },
+  ];
+
+  const handleRemoveBackground = async (elementId: string, imageUrl: string) => {
+    try {
+      setProcessingElementId(elementId);
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("/api/image-processing/remove-background", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ imageUrl }),
+      });
+      
+      if (!res.ok) throw new Error("Failed to remove background");
+      
+      const data = await res.json();
+      
+      setCanvasElements((prev) =>
+        prev.map((el) =>
+          el.id === elementId
+            ? {
+                ...el,
+                data: {
+                  ...el.data,
+                  ...(el.data.product
+                    ? { product: { ...el.data.product, imageUrl: data.url } }
+                    : { imageUrl: data.url }),
+                },
+              }
+            : el
+        )
+      );
+      
+      toast({
+        title: t("common.success"),
+        description: t("editor.backgroundRemoved"),
+      });
+    } catch (error) {
+      console.error("Background removal error:", error);
+      toast({
+        title: t("common.error"),
+        description: t("editor.backgroundRemovalFailed"),
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingElementId(null);
+    }
+  };
+
+  const handleApplyPreset = async (elementId: string, imageUrl: string, preset: string) => {
+    try {
+      setProcessingElementId(elementId);
+      const token = localStorage.getItem("authToken");
+      const res = await fetch("/api/image-processing/apply-preset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ imageUrl, preset }),
+      });
+      
+      if (!res.ok) throw new Error("Failed to apply preset");
+      
+      const data = await res.json();
+      
+      setCanvasElements((prev) =>
+        prev.map((el) =>
+          el.id === elementId
+            ? {
+                ...el,
+                data: {
+                  ...el.data,
+                  ...(el.data.product
+                    ? { product: { ...el.data.product, imageUrl: data.url } }
+                    : { imageUrl: data.url }),
+                },
+              }
+            : el
+        )
+      );
+      
+      toast({
+        title: t("common.success"),
+        description: t("editor.presetApplied"),
+      });
+    } catch (error) {
+      console.error("Preset application error:", error);
+      toast({
+        title: t("common.error"),
+        description: t("editor.presetApplyFailed"),
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingElementId(null);
+    }
+  };
 
   const { data: campaign, isLoading: loadingCampaign } = useQuery<Campaign>({
     queryKey: [`/api/campaigns/${id}`],
@@ -816,10 +939,72 @@ export default function CampaignEditorPage() {
       const name = productData.name;
       const price = element.data.campaignPrice || productData.price;
       const discountPrice = element.data.campaignDiscountPrice || productData.discountPrice;
+      const isProcessing = processingElementId === element.id;
       
       return (
-        <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col">
-          <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
+        <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col relative group">
+          {!inPreview && imageUrl && (
+            <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="h-6 w-6"
+                    disabled={isProcessing}
+                    data-testid={`button-image-actions-${element.id}`}
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <MoreVertical className="h-3 w-3" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel>{t('editor.imageActions')}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveBackground(element.id, imageUrl);
+                    }}
+                    disabled={isProcessing}
+                    data-testid={`button-remove-bg-${element.id}`}
+                  >
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    {t('editor.removeBackground')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger disabled={isProcessing}>
+                      <Palette className="h-4 w-4 mr-2" />
+                      {t('editor.applyPreset')}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {IMAGE_PRESETS.map((preset) => (
+                        <DropdownMenuItem
+                          key={preset.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApplyPreset(element.id, imageUrl, preset.id);
+                          }}
+                          data-testid={`button-preset-${preset.id}-${element.id}`}
+                        >
+                          {preset.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+          <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden relative">
+            {isProcessing && (
+              <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            )}
             {imageUrl ? (
               <img
                 src={imageUrl}
