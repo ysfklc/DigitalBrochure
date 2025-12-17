@@ -26,6 +26,7 @@ import TemplatesPage from "@/pages/templates";
 import CampaignsPage from "@/pages/campaigns";
 import CampaignWizardPage from "@/pages/campaign-wizard";
 import CampaignEditorPage from "@/pages/campaign-editor";
+import CampaignPreviewPage from "@/pages/campaign-preview";
 import TemplateEditorPage from "@/pages/template-editor";
 import MessagesPage from "@/pages/messages";
 import SuggestionsPage from "@/pages/suggestions";
@@ -103,7 +104,8 @@ function ProtectedRoutes() {
       <Route path="/campaigns" component={() => <ProtectedRoute component={CampaignsPage} />} />
       <Route path="/campaigns/new" component={() => <ProtectedRoute component={CampaignWizardPage} />} />
       <Route path="/campaigns/:id/edit" component={() => <ProtectedRoute component={CampaignEditorPage} />} />
-      <Route path="/campaigns/:id" component={() => <ProtectedRoute component={CampaignEditorPage} />} />
+      <Route path="/campaigns/:id/preview" component={() => <ProtectedRoute component={CampaignPreviewPage} />} />
+      <Route path="/campaigns/:id" component={() => <ProtectedRoute component={CampaignPreviewPage} />} />
       <Route path="/sharing" component={() => <ProtectedRoute component={SharingPage} />} />
       <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
       <Route path="/suggestions" component={() => <ProtectedRoute component={SuggestionsPage} />} />

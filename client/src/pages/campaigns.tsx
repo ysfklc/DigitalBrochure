@@ -13,7 +13,8 @@ import {
   Trash2,
   Copy,
   Share2,
-  Eye
+  Eye,
+  Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,146 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Campaign } from "@shared/schema";
+
+const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
+  square: { width: 1080, height: 1080 },
+  portrait: { width: 1080, height: 1350 },
+  landscape: { width: 1080, height: 566 },
+  a4portrait: { width: 794, height: 1123 },
+  a4landscape: { width: 1123, height: 794 },
+};
+
+function CampaignThumbnail({ campaign }: { campaign: Campaign }) {
+  const canvasData = campaign.canvasData as any;
+  
+  if (!canvasData?.elements?.length) {
+    return <Calendar className="h-12 w-12 text-muted-foreground" />;
+  }
+  
+  const elements = canvasData.elements || [];
+  const canvasSize = canvasData.canvasSize || 'a4portrait';
+  const baseWidth = CANVAS_SIZES[canvasSize]?.width || 794;
+  const baseHeight = CANVAS_SIZES[canvasSize]?.height || 1123;
+  
+  const containerWidth = 200;
+  const containerHeight = 160;
+  const scale = Math.min(containerWidth / baseWidth, containerHeight / baseHeight) * 0.9;
+  
+  const scaledWidth = baseWidth * scale;
+  const scaledHeight = baseHeight * scale;
+
+  const renderElement = (element: any) => {
+    if (element.type === 'product') {
+      const productData = element.data?.product || element.data;
+      const imageUrl = productData?.imageUrl;
+      
+      return (
+        <div className="w-full h-full bg-card border rounded-sm overflow-hidden flex flex-col">
+          <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Package className="h-3 w-3 text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    if (element.type === 'text') {
+      const textData = element.data;
+      return (
+        <div
+          className="w-full h-full flex items-center overflow-hidden"
+          style={{
+            fontFamily: textData?.fontFamily,
+            fontSize: `${(textData?.fontSize || 12) * scale * 0.3}px`,
+            fontWeight: textData?.fontWeight,
+            color: textData?.color,
+            backgroundColor: textData?.backgroundColor === 'transparent' ? 'transparent' : textData?.backgroundColor,
+          }}
+        >
+          <span className="truncate px-0.5">{textData?.text}</span>
+        </div>
+      );
+    }
+    
+    if (element.type === 'shape') {
+      const shapeData = element.data;
+      
+      if (shapeData?.shapeType === 'rectangle') {
+        return (
+          <div
+            className="w-full h-full"
+            style={{
+              backgroundColor: shapeData?.fill,
+              border: `1px solid ${shapeData?.stroke}`,
+              borderRadius: '2px',
+            }}
+          />
+        );
+      }
+      
+      if (shapeData?.shapeType === 'circle') {
+        return (
+          <div
+            className="w-full h-full rounded-full"
+            style={{
+              backgroundColor: shapeData?.fill,
+              border: `1px solid ${shapeData?.stroke}`,
+            }}
+          />
+        );
+      }
+      
+      if (shapeData?.shapeType === 'triangle') {
+        return (
+          <svg viewBox="0 0 100 100" className="w-full h-full">
+            <polygon
+              points="50,5 95,95 5,95"
+              fill={shapeData?.fill}
+              stroke={shapeData?.stroke}
+              strokeWidth={1}
+            />
+          </svg>
+        );
+      }
+    }
+    
+    return null;
+  };
+
+  return (
+    <div 
+      className="relative bg-white rounded shadow-sm overflow-hidden"
+      style={{
+        width: scaledWidth,
+        height: scaledHeight,
+      }}
+    >
+      {elements.filter((el: any) => el.page === 1).map((element: any) => (
+        <div
+          key={element.id}
+          className="absolute"
+          style={{
+            left: element.x * scale,
+            top: element.y * scale,
+            width: element.width * scale,
+            height: element.height * scale,
+            transform: `rotate(${element.rotation || 0}deg)`,
+            opacity: (element.opacity || 100) / 100,
+          }}
+        >
+          {renderElement(element)}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function CampaignsPage() {
   const { t } = useTranslation();
@@ -200,15 +341,7 @@ export default function CampaignsPage() {
               <Card key={campaign.id} className="overflow-hidden" data-testid={`card-campaign-${campaign.id}`}>
                 <CardHeader className="p-0 relative">
                   <div className="h-40 bg-muted flex items-center justify-center">
-                    {campaign.thumbnailUrl ? (
-                      <img
-                        src={campaign.thumbnailUrl}
-                        alt={campaign.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Calendar className="h-12 w-12 text-muted-foreground" />
-                    )}
+                    <CampaignThumbnail campaign={campaign} />
                   </div>
                   <Badge
                     variant={getStatusBadgeVariant(campaign.status)}
