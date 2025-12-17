@@ -209,39 +209,40 @@ export function getAvailablePresets() {
 export async function removeBackgroundFromUrl(imageSource: string, outputDir: string): Promise<string> {
   await fs.ensureDir(outputDir);
   
-  let buffer: Buffer;
-  const isLocalPath = !imageSource.startsWith('http://') && !imageSource.startsWith('https://');
-  
-  if (isLocalPath) {
-    buffer = await fs.readFile(imageSource);
-  } else {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-    
-    try {
-      const response = await fetch(imageSource, { signal: controller.signal });
-      clearTimeout(timeout);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
-      }
-      
-      const arrayBuffer = await response.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } catch (error: any) {
-      clearTimeout(timeout);
-      if (error.name === 'AbortError') {
-        throw new Error('Image fetch timeout');
-      }
-      throw error;
-    }
-  }
-  
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substr(2, 9);
+  const isRemoteUrl = imageSource.startsWith('http://') || imageSource.startsWith('https://');
   
   try {
-    const result = await removeBackground(buffer);
+    let buffer: Buffer;
+    
+    if (isRemoteUrl) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      
+      try {
+        const response = await fetch(imageSource, { signal: controller.signal });
+        clearTimeout(timeout);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        
+        const arrayBuffer = await response.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+      } catch (error: any) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+          throw new Error('Image fetch timeout');
+        }
+        throw error;
+      }
+    } else {
+      buffer = await fs.readFile(imageSource);
+    }
+    
+    const normalizedBuffer = await sharp(buffer).png().toBuffer();
+    const result = await removeBackground(normalizedBuffer);
     const resultArrayBuffer = await result.arrayBuffer();
     const outputPath = path.join(outputDir, `nobg_${timestamp}_${randomId}.png`);
     await sharp(Buffer.from(resultArrayBuffer)).png().toFile(outputPath);
@@ -252,48 +253,66 @@ export async function removeBackgroundFromUrl(imageSource: string, outputDir: st
   }
 }
 
+async function fetchImageBuffer(imageSource: string): Promise<Buffer> {
+  const isRemoteUrl = imageSource.startsWith('http://') || imageSource.startsWith('https://');
+  
+  if (!isRemoteUrl) {
+    return fs.readFile(imageSource);
+  }
+  
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  
+  try {
+    const response = await fetch(imageSource, { signal: controller.signal });
+    clearTimeout(timeout);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error: any) {
+    clearTimeout(timeout);
+    if (error.name === 'AbortError') {
+      throw new Error('Image fetch timeout');
+    }
+    throw error;
+  }
+}
+
 export async function applyPresetFromUrl(imageSource: string, preset: string, outputDir: string): Promise<string> {
   await fs.ensureDir(outputDir);
   
-  let buffer: Buffer;
-  const isLocalPath = !imageSource.startsWith('http://') && !imageSource.startsWith('https://');
-  
-  if (isLocalPath) {
-    buffer = await fs.readFile(imageSource);
-  } else {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-    
-    try {
-      const response = await fetch(imageSource, { signal: controller.signal });
-      clearTimeout(timeout);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
-      }
-      
-      const arrayBuffer = await response.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } catch (error: any) {
-      clearTimeout(timeout);
-      if (error.name === 'AbortError') {
-        throw new Error('Image fetch timeout');
-      }
-      throw error;
-    }
-  }
-  
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substr(2, 9);
-  const tempInputPath = path.join(outputDir, `temp_${timestamp}_${randomId}.png`);
-  
-  await fs.writeFile(tempInputPath, buffer);
+  const isAlreadyProcessed = imageSource.includes('nobg_') || 
+    imageSource.includes('side_by_side') ||
+    imageSource.includes('clean_center') ||
+    imageSource.includes('clean_offset') ||
+    imageSource.includes('editorial_left') ||
+    imageSource.includes('editorial_right') ||
+    imageSource.includes('product_duo_depth') ||
+    imageSource.includes('minimal_motion') ||
+    imageSource.includes('overlap_left') ||
+    imageSource.includes('overlap_right');
   
   try {
-    const cleanImg = await removeBg(tempInputPath);
-    
     if (!PRESETS[preset]) {
       throw new Error(`Unknown preset: ${preset}`);
+    }
+    
+    let cleanImg: sharp.Sharp;
+    const buffer = await fetchImageBuffer(imageSource);
+    
+    if (isAlreadyProcessed) {
+      cleanImg = sharp(buffer).png();
+    } else {
+      const normalizedBuffer = await sharp(buffer).png().toBuffer();
+      const result = await removeBackground(normalizedBuffer);
+      const resultArrayBuffer = await result.arrayBuffer();
+      cleanImg = sharp(Buffer.from(resultArrayBuffer)).png();
     }
     
     const fn = PRESETS[preset];
@@ -301,11 +320,8 @@ export async function applyPresetFromUrl(imageSource: string, preset: string, ou
     const outputPath = path.join(outputDir, `${preset}_${timestamp}_${randomId}.png`);
     await composed.png().toFile(outputPath);
     
-    await fs.remove(tempInputPath);
-    
     return outputPath;
   } catch (error) {
-    await fs.remove(tempInputPath);
     throw error;
   }
 }
