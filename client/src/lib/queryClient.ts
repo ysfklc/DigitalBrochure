@@ -1,7 +1,19 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+let on401Handler: (() => void) | null = null;
+
+export function setQueryClientErrorHandler(handler: () => void) {
+  on401Handler = handler;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      if (on401Handler) {
+        on401Handler();
+      }
+    }
+    
     const text = await res.text();
     try {
       const json = JSON.parse(text);

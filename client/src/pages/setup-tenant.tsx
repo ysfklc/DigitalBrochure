@@ -136,14 +136,21 @@ export default function SetupTenantPage() {
       });
       return response;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // If immediately approved, update tenantId
+      if (data.approved && data.tenantId && user) {
+        updateUser({ ...user, tenantId: data.tenantId });
+      }
       toast({
         title: t("common.success"),
-        description: "Join request submitted! The organization admin will review your request.",
+        description: data.approved 
+          ? "You've joined the organization!" 
+          : "Join request submitted! The organization admin will review your request.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/join-requests/my"] });
-      setMode("choice");
       joinForm.reset();
+      // Redirect to dashboard after successful join or create
+      setLocation("/dashboard");
     },
     onError: (error: any) => {
       toast({

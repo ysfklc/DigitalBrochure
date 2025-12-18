@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -28,7 +28,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
@@ -37,6 +37,13 @@ export default function LoginPage() {
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+
+  // Redirect to dashboard when authentication succeeds
+  useEffect(() => {
+    if (isAuthenticated) {
+      setLocation("/dashboard");
+    }
+  }, [isAuthenticated, setLocation]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -62,6 +69,7 @@ export default function LoginPage() {
           title: t("common.success"),
           description: t("auth.login") + " " + t("common.success").toLowerCase(),
         });
+        // Redirect to dashboard immediately
         setLocation("/dashboard");
       }
     },

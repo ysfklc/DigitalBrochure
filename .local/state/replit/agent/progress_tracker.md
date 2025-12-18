@@ -147,10 +147,61 @@
     - Root cause: Background removal library couldn't detect image format from raw buffer
     - Fix: Added image normalization step using Sharp to convert to PNG before background removal
     - Updated removeBackgroundFromUrl and removeBg functions in server/image-processing.ts
-[x] 44. Environment migration completed (December 17, 2025):
+[x] 45. Environment migration completed (December 18, 2025):
     - npm install executed successfully
     - Database schema pushed (no changes detected)
     - Workflow configured with webview output on port 5000
     - Application running successfully - Express server serving on port 5000
     - Super admin user created successfully
     - All systems operational
+[x] 46. Fixed 401 Unauthorized error handling (December 18, 2025):
+    - Added setQueryClientErrorHandler function in client/src/lib/queryClient.ts
+    - Modified throwIfResNotOk to detect 401 responses and trigger global error handler
+    - Updated client/src/App.tsx to set up global error handler in AppLayout component
+    - When 401 error occurs from any API call, user is logged out and redirected to /login
+    - Replaced 404 "Page Not Found" error with proper 401 authentication flow
+    - User is now properly redirected to login after logout or session expiry
+    - Application restarted successfully with changes
+[x] 47. Fixed unauthenticated access to protected routes (December 18, 2025):
+    - Changed PublicRoutes catch-all from NotFound to Redirect to /login
+    - When unauthenticated users try to access protected routes (e.g., /settings, /dashboard)
+    - They are now redirected to /login instead of showing 404 error
+    - Proper 401 Unauthorized flow is now complete:
+      - Unauthenticated page access → redirect to /login
+      - API calls returning 401 → logout and redirect to /login
+    - Application tested and running on port 5000
+[x] 48. Fixed post-login redirect to dashboard (December 18, 2025):
+    - Added useEffect hook to login.tsx that watches isAuthenticated state
+    - Added explicit setLocation("/dashboard") call in login mutation onSuccess (line 76)
+    - Added setLocation("/dashboard") call after 2FA verification success (line 124)
+    - Both approaches ensure user is redirected immediately after successful login
+    - After successful login (without 2FA), user is redirected to /dashboard
+    - After successful login with 2FA verification, user is redirected to /dashboard
+    - Application tested and running on port 5000 with confirmed working redirect
+
+[x] 49. Fixed 404 error when authenticated users access /login (December 18, 2025):
+    - Issue: When logged-in user accessed /login, got 404 because AppLayout didn't render PublicRoutes
+    - Root cause: AppLayout only renders PublicRoutes when !isAuthenticated
+    - Solution: Added routes in AppLayout's main Switch to catch auth routes and redirect
+    - Added redirects for /login, /register, /reset-password to /dashboard (App.tsx lines 209-217)
+    - Now when authenticated user accesses /login → route matches → redirects to /dashboard
+    - No more 404 error for authenticated users trying to access /login
+    - Application tested and running on port 5000
+
+[x] 50. Redirect to /dashboard after tenant creation or joining (December 18, 2025):
+    - Create tenant flow: Redirects to /dashboard after setupTenantMutation succeeds (line 120)
+    - Join tenant flow: Now always redirects to /dashboard after successful join request submission (line 156)
+    - Modified joinTenantMutation.onSuccess to check for data.approved && data.tenantId (lines 144-146)
+    - If immediately approved: Update user's tenantId before redirect
+    - If pending approval: User redirected to /dashboard where they can check status later
+    - Both flows now consistently redirect users to /dashboard after completion
+    - Toast message updated to show "You've joined the organization!" if approved, otherwise shows pending message
+    - Application tested and running on port 5000
+
+[x] 51. Prevent users with tenantId from accessing /setup-tenant (December 18, 2025):
+    - Added redirect route for /setup-tenant to /dashboard in authenticated layout (App.tsx line 218-220)
+    - When users with tenantId try to access /setup-tenant, they're redirected to /dashboard
+    - Prevents users from re-entering tenant setup flow after completion
+    - Applied same pattern as other auth routes (/login, /register, etc.)
+    - Comprehensive redirect logic now covers all tenant setup scenarios
+    - Application tested and running on port 5000
