@@ -38,6 +38,7 @@ import { Plus, Pencil, Trash2, Building2, Users, CreditCard, Eye } from "lucide-
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { useRoleVerification } from "@/lib/use-role-verification";
 import type { Tenant, Subscription, User } from "@shared/schema";
 
 interface TenantWithDetails extends Tenant {
@@ -46,6 +47,9 @@ interface TenantWithDetails extends Tenant {
 }
 
 export default function TenantsPage() {
+  // Verify user has super_admin role (security check against localStorage tampering)
+  useRoleVerification(["super_admin"]);
+
   const { t } = useTranslation();
   const { toast } = useToast();
   const { user, token, startImpersonation } = useAuth();

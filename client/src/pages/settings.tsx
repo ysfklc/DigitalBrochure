@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send, Plus, Trash2, Edit, Link, TestTube } from "lucide-react";
+import { useRoleVerification } from "@/lib/use-role-verification";
 import type { ProductConnector } from "@shared/schema";
 
 interface IyzicoConfig {
@@ -81,6 +82,9 @@ const emptyConnectorForm: ConnectorFormData = {
 };
 
 export default function SettingsPage() {
+  // Verify user has super_admin role (security check against localStorage tampering)
+  useRoleVerification(["super_admin"]);
+
   const { t } = useTranslation();
   const { toast } = useToast();
   const [showSecrets, setShowSecrets] = useState(false);

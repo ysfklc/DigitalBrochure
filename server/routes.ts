@@ -284,6 +284,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/auth/me", authenticate, (req: AuthRequest, res: Response) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    res.json({
+      id: req.user.id,
+      email: req.user.email,
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
+      tenantId: req.user.tenantId,
+      role: req.user.role
+    });
+  });
+
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const data = loginSchema.parse(req.body);
