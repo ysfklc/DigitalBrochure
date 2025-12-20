@@ -970,6 +970,65 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/templates/setup", authenticate, requireTenant, upload.fields([
+    { name: 'backgroundImage', maxCount: 1 },
+    { name: 'coverPageImage', maxCount: 1 },
+    { name: 'middlePageImage', maxCount: 1 },
+    { name: 'finalPageImage', maxCount: 1 },
+    { name: 'labelImage', maxCount: 1 },
+  ]), async (req: AuthRequest, res: Response) => {
+    try {
+      const {
+        title,
+        type,
+        labelTemplateId,
+        productTitleConfig,
+        labelTextConfig,
+        discountedPriceConfig,
+        unitOfMeasureConfig,
+        dateTextConfig,
+      } = req.body;
+
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+
+      const templateData: any = {
+        tenantId: req.user!.tenantId,
+        title,
+        type,
+        labelTemplateId: labelTemplateId || null,
+        productTitleConfig: productTitleConfig ? JSON.parse(typeof productTitleConfig === 'string' ? productTitleConfig : JSON.stringify(productTitleConfig)) : null,
+        labelTextConfig: labelTextConfig ? JSON.parse(typeof labelTextConfig === 'string' ? labelTextConfig : JSON.stringify(labelTextConfig)) : null,
+        discountedPriceConfig: discountedPriceConfig ? JSON.parse(typeof discountedPriceConfig === 'string' ? discountedPriceConfig : JSON.stringify(discountedPriceConfig)) : null,
+        unitOfMeasureConfig: unitOfMeasureConfig ? JSON.parse(typeof unitOfMeasureConfig === 'string' ? unitOfMeasureConfig : JSON.stringify(unitOfMeasureConfig)) : null,
+        dateTextConfig: dateTextConfig ? JSON.parse(typeof dateTextConfig === 'string' ? dateTextConfig : JSON.stringify(dateTextConfig)) : null,
+      };
+
+      // Handle image URLs if files are provided
+      if (files?.backgroundImage?.[0]) {
+        templateData.backgroundImageUrl = `/uploads/${files.backgroundImage[0].filename}`;
+      }
+      if (files?.coverPageImage?.[0]) {
+        templateData.coverPageImageUrl = `/uploads/${files.coverPageImage[0].filename}`;
+      }
+      if (files?.middlePageImage?.[0]) {
+        templateData.middlePageImageUrl = `/uploads/${files.middlePageImage[0].filename}`;
+      }
+      if (files?.finalPageImage?.[0]) {
+        templateData.finalPageImageUrl = `/uploads/${files.finalPageImage[0].filename}`;
+      }
+
+      const data = insertTemplateSchema.parse(templateData);
+      const template = await storage.createTemplate(data);
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating template:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
   app.delete("/api/templates/:id", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
     try {
       const template = await storage.getTemplate(req.params.id);

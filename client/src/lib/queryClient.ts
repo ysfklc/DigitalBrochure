@@ -44,14 +44,24 @@ export async function apiRequest(
   const headers: Record<string, string> = {
     ...getAuthHeaders(),
   };
+  
+  let body: BodyInit | undefined = undefined;
+  
   if (data) {
-    headers["Content-Type"] = "application/json";
+    // Handle FormData specially - don't set Content-Type, let browser handle it
+    if (data instanceof FormData) {
+      body = data;
+    } else {
+      // For JSON data, set Content-Type and stringify
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(data);
+    }
   }
   
   const res = await fetch(url, {
     method,
     headers,
-    body: data ? JSON.stringify(data) : undefined,
+    body,
     credentials: "include",
   });
 

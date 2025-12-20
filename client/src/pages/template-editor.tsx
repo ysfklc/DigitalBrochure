@@ -173,6 +173,7 @@ export default function TemplateEditorPage() {
   const [headerHeight, setHeaderHeight] = useState(80);
   const [footerHeight, setFooterHeight] = useState(60);
   const [backgroundColor, setBackgroundColor] = useState('#ffffff');
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
   const [copiedElement, setCopiedElement] = useState<CanvasElement | null>(null);
 
   const { data: template, isLoading: loadingTemplate } = useQuery<Template>({
@@ -185,6 +186,13 @@ export default function TemplateEditorPage() {
       setTemplateName(template.title);
       setTemplateType(template.type as "single_page" | "multi_page");
       setBackgroundColor(template.backgroundColor || '#ffffff');
+      
+      // Apply background image from template
+      if (template.type === 'single_page' && template.backgroundImageUrl) {
+        setBackgroundImageUrl(template.backgroundImageUrl);
+      } else if (template.type === 'multi_page' && template.coverPageImageUrl) {
+        setBackgroundImageUrl(template.coverPageImageUrl);
+      }
       
       const canvasData = template.coverPageConfig as any;
       if (canvasData) {
@@ -1071,7 +1079,7 @@ export default function TemplateEditorPage() {
         <div className="flex-1 overflow-auto bg-muted/50 p-8 flex items-start justify-center">
           <div
             ref={canvasRef}
-            className={`relative bg-white shadow-xl transition-shadow ${
+            className={`relative shadow-xl transition-shadow ${
               activeTool === 'text' ? 'cursor-text' :
               activeTool === 'shape' ? 'cursor-crosshair' :
               activeTool === 'draw' ? 'cursor-crosshair' :
@@ -1081,6 +1089,9 @@ export default function TemplateEditorPage() {
               width: `${scaledCanvasWidth}px`,
               height: `${scaledCanvasHeight}px`,
               backgroundColor,
+              backgroundImage: backgroundImageUrl ? `url(${backgroundImageUrl})` : 'none',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
             }}
             onClick={handleCanvasClick}
             onMouseDown={handleCanvasMouseDown}

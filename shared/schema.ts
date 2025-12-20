@@ -83,6 +83,20 @@ export const templates = pgTable("templates", {
   tenantId: varchar("tenant_id").references(() => tenants.id),
   title: text("title").notNull(),
   type: templateTypeEnum("type").notNull(),
+  labelTemplateId: varchar("label_template_id").references(() => priceTagTemplates.id),
+  // Single-page template background image
+  backgroundImageUrl: text("background_image_url"),
+  // Multi-page template images
+  coverPageImageUrl: text("cover_page_image_url"),
+  middlePageImageUrl: text("middle_page_image_url"),
+  finalPageImageUrl: text("final_page_image_url"),
+  // Text styling configurations (stored as JSON)
+  productTitleConfig: jsonb("product_title_config"),
+  labelTextConfig: jsonb("label_text_config"),
+  discountedPriceConfig: jsonb("discounted_price_config"),
+  unitOfMeasureConfig: jsonb("unit_of_measure_config"),
+  dateTextConfig: jsonb("date_text_config"),
+  // Legacy fields for backward compatibility
   coverPageConfig: jsonb("cover_page_config"),
   innerPageConfig: jsonb("inner_page_config"),
   backPageConfig: jsonb("back_page_config"),
@@ -227,6 +241,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
 
 export const templatesRelations = relations(templates, ({ one, many }) => ({
   tenant: one(tenants, { fields: [templates.tenantId], references: [tenants.id] }),
+  labelTemplate: one(priceTagTemplates, { fields: [templates.labelTemplateId], references: [priceTagTemplates.id] }),
   campaigns: many(campaigns),
 }));
 
