@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
-import { ChevronLeft, ChevronRight, Edit, Package, Download, Printer } from "lucide-react";
+import { useParams } from "wouter";
+import { ChevronLeft, ChevronRight, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import type { Campaign } from "@shared/schema";
 
 type CanvasSizeKey = 'square' | 'portrait' | 'landscape' | 'a4portrait' | 'a4landscape';
@@ -99,10 +98,9 @@ const formatCampaignDate = (date: Date | string | null | undefined, format: stri
   }
 };
 
-export default function CampaignPreviewPage() {
+export default function CampaignViewPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  const [, setLocation] = useLocation();
   
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -164,19 +162,16 @@ export default function CampaignPreviewPage() {
       const discountPrice = element.data.campaignDiscountPrice || productData.discountPrice;
       const unit = productData.unit || 'each';
       
-      // Get price styling from template
       const priceConfig = (template as any)?.discountedPriceConfig || {};
       const labelTextConfig = (template as any)?.labelTextConfig || {};
       const unitConfig = (template as any)?.unitOfMeasureConfig || {};
       const labelImageUrl = (template as any)?.labelImageUrl;
       
-      // Calculate price label dimensions - 1/6 of product size, positioned at bottom-right
       const labelWidth = Math.max(element.width / 6, 50) * scale;
       const labelHeight = Math.max(element.height / 6, 40) * scale;
       
       return (
         <div className="w-full h-full relative overflow-visible">
-          {/* Product Image */}
           <div className="absolute inset-0 flex items-center justify-center">
             {imageUrl ? (
               <img
@@ -192,7 +187,6 @@ export default function CampaignPreviewPage() {
             )}
           </div>
           
-          {/* Price Label - Bottom right corner */}
           {(price || discountPrice) && (
             <div 
               className="absolute flex items-center justify-center rounded-sm overflow-hidden"
@@ -389,7 +383,7 @@ export default function CampaignPreviewPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-screen">
         <div className="flex items-center gap-4 px-4 py-3 border-b bg-background">
           <Skeleton className="h-9 w-9" />
           <Skeleton className="h-6 w-48" />
@@ -403,11 +397,8 @@ export default function CampaignPreviewPage() {
 
   if (!campaign) {
     return (
-      <div className="flex flex-col h-full items-center justify-center">
-        <p className="text-muted-foreground">{t('campaigns.notFound')}</p>
-        <Button variant="ghost" onClick={() => setLocation("/campaigns")}>
-          {t('common.backToList')}
-        </Button>
+      <div className="flex flex-col h-screen items-center justify-center">
+        <p className="text-muted-foreground mb-4">Campaign not found</p>
       </div>
     );
   }
@@ -418,36 +409,17 @@ export default function CampaignPreviewPage() {
   const scaledFooterHeight = (footerHeight * scale);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen">
       <div className="flex items-center justify-between gap-4 px-4 py-3 border-b bg-background sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/campaigns")}
-            data-testid="button-back"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
           <div className="flex items-center gap-2">
             <h1 className="font-semibold text-lg" data-testid="text-campaign-name">
               {campaign.name}
             </h1>
             <Badge variant={getStatusBadgeVariant(campaign.status)}>
-              {t(`campaigns.${campaign.status}`)}
+              {campaign.status}
             </Badge>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setLocation(`/campaigns/${id}/edit`)}
-            data-testid="button-edit-campaign"
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            {t('campaigns.openEditor')}
-          </Button>
         </div>
       </div>
 
@@ -507,7 +479,7 @@ export default function CampaignPreviewPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-sm text-muted-foreground">
-              {t('editor.pageOf', { current: currentPage, total: totalPages })}
+              {currentPage} / {totalPages}
             </span>
             <Button
               variant="outline"

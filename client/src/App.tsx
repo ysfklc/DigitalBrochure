@@ -29,6 +29,7 @@ import CampaignsPage from "@/pages/campaigns";
 import CampaignWizardPage from "@/pages/campaign-wizard";
 import CampaignEditorPage from "@/pages/campaign-editor";
 import CampaignPreviewPage from "@/pages/campaign-preview";
+import CampaignViewPage from "@/pages/campaign-view";
 import TemplateEditorPage from "@/pages/template-editor";
 import MessagesPage from "@/pages/messages";
 import SuggestionsPage from "@/pages/suggestions";
@@ -90,6 +91,7 @@ function PublicRoutes() {
       <Route path="/setup-2fa" component={Setup2FAPage} />
       <Route path="/setup-tenant" component={SetupTenantPage} />
       <Route path="/subscription" component={SubscriptionPage} />
+      <Route path="/view/:id" component={CampaignViewPage} />
       <Route>
         <Redirect to="/login" />
       </Route>

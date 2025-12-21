@@ -2410,13 +2410,13 @@ export default function CampaignEditorPage() {
             >
               {showHeaderZone && (
                 <div
-                  className="absolute left-0 right-0 top-0 bg-blue-50/30"
+                  className="absolute left-0 right-0 top-0 pointer-events-none"
                   style={{ height: `${headerHeight * 0.4}px` }}
                 />
               )}
               {showFooterZone && (
                 <div
-                  className="absolute left-0 right-0 bottom-0 bg-green-50/30"
+                  className="absolute left-0 right-0 bottom-0 pointer-events-none"
                   style={{ height: `${footerHeight * 0.4}px` }}
                 />
               )}

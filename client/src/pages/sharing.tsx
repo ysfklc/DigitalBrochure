@@ -56,6 +56,13 @@ export default function SharingPage() {
   });
 
   const selectedCampaign = campaigns?.find((c) => c.id === selectedCampaignId);
+  
+  // Fetch template for background image
+  const { data: template } = useQuery<any>({
+    queryKey: [`/api/templates/${selectedCampaign?.templateId}`],
+    enabled: !!selectedCampaign?.templateId,
+  });
+
   const shareUrl = selectedCampaign 
     ? `${window.location.origin}/view/${selectedCampaign.id}` 
     : "";
@@ -83,91 +90,129 @@ export default function SharingPage() {
     
     setDownloading(format);
     try {
-      // Fetch the campaign with all details
-      const response = await fetch(`/api/campaigns/${selectedCampaign.id}`);
-      const campaignData = await response.json();
-      
-      const canvasData = campaignData.canvasData || {};
+      const canvasData = (selectedCampaign.canvasData as any) || {};
       const totalPages = canvasData.totalPages || 1;
       const canvasSize = canvasData.canvasSize || "a4portrait";
       const sizeDims = CANVAS_SIZES[canvasSize] || CANVAS_SIZES.a4portrait;
+      const elements = canvasData.elements || [];
+
+      const renderPage = async (page: number) => {
+        const pageElements = elements.filter((el: any) => el.page === page);
+        
+        const previewDiv = document.createElement("div");
+        previewDiv.style.position = "absolute";
+        previewDiv.style.left = "-9999px";
+        previewDiv.style.width = sizeDims.width + "px";
+        previewDiv.style.height = sizeDims.height + "px";
+        previewDiv.style.backgroundColor = "#ffffff";
+        previewDiv.style.overflow = "hidden";
+        previewDiv.style.backgroundImage = template?.backgroundImageUrl ? `url(${template.backgroundImageUrl})` : "none";
+        previewDiv.style.backgroundSize = "cover";
+        previewDiv.style.backgroundPosition = "center";
+        document.body.appendChild(previewDiv);
+
+        // Render elements
+        pageElements.forEach((element: any) => {
+          const el = document.createElement("div");
+          el.style.position = "absolute";
+          el.style.left = element.x + "px";
+          el.style.top = element.y + "px";
+          el.style.width = element.width + "px";
+          el.style.height = element.height + "px";
+          el.style.transform = `rotate(${element.rotation}deg)`;
+          el.style.opacity = (element.opacity / 100).toString();
+
+          if (element.type === "product" && element.data.product?.imageUrl) {
+            const img = document.createElement("img");
+            img.src = element.data.product.imageUrl;
+            img.style.width = "100%";
+            img.style.height = "100%";
+            img.style.objectFit = "contain";
+            el.appendChild(img);
+          } else if (element.type === "text") {
+            el.style.fontFamily = element.data.fontFamily || "Inter";
+            el.style.fontSize = element.data.fontSize + "px";
+            el.style.fontWeight = element.data.fontWeight || "normal";
+            el.style.color = element.data.color || "#000000";
+            el.style.display = "flex";
+            el.style.alignItems = "center";
+            el.style.justifyContent = element.data.textAlign || "left";
+            el.textContent = element.data.text;
+            el.style.whiteSpace = "nowrap";
+            el.style.overflow = "hidden";
+          } else if (element.type === "shape") {
+            if (element.data.shapeType === "rectangle") {
+              el.style.backgroundColor = element.data.fill || "transparent";
+              el.style.border = `${element.data.strokeWidth}px solid ${element.data.stroke}`;
+              el.style.borderRadius = "4px";
+            } else if (element.data.shapeType === "circle") {
+              el.style.backgroundColor = element.data.fill || "transparent";
+              el.style.border = `${element.data.strokeWidth}px solid ${element.data.stroke}`;
+              el.style.borderRadius = "50%";
+            } else if (element.data.shapeType === "line") {
+              el.style.backgroundColor = element.data.stroke;
+              el.style.height = element.data.strokeWidth + "px";
+            }
+          }
+
+          previewDiv.appendChild(el);
+        });
+
+        // Capture with html2canvas
+        const canvas = await html2canvas(previewDiv, {
+          backgroundColor: "#ffffff",
+          scale: 1,
+          logging: false,
+          useCORS: true,
+          allowTaint: true,
+        });
+
+        document.body.removeChild(previewDiv);
+        return canvas;
+      };
 
       if (totalPages === 1) {
         // Single page: download directly
-        const canvas = document.createElement("canvas");
-        canvas.width = sizeDims.width;
-        canvas.height = sizeDims.height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Could not get canvas context");
-
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        if (format === "png") {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `${selectedCampaign.name}-page-1.png`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-              toast({
-                title: t("common.success"),
-                description: `Downloaded page 1 as PNG`,
-              });
-            }
-          });
-        } else {
-          // SVG format
-          const svgContent = `<svg width="${sizeDims.width}" height="${sizeDims.height}" xmlns="http://www.w3.org/2000/svg">
-            <rect width="${sizeDims.width}" height="${sizeDims.height}" fill="white"/>
-          </svg>`;
-          const blob = new Blob([svgContent], { type: "image/svg+xml" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${selectedCampaign.name}-page-1.svg`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          toast({
-            title: t("common.success"),
-            description: `Downloaded page 1 as SVG`,
-          });
-        }
+        const canvas = await renderPage(1);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${selectedCampaign.name}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setDownloading(null);
+            toast({
+              title: t("common.success"),
+              description: `Downloaded brochure as PNG`,
+            });
+          }
+        });
       } else {
-        // Multiple pages: create ZIP
+        // Multiple pages: create ZIP with all pages
         const zip = new JSZip();
 
         for (let page = 1; page <= totalPages; page++) {
-          const canvas = document.createElement("canvas");
-          canvas.width = sizeDims.width;
-          canvas.height = sizeDims.height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) throw new Error("Could not get canvas context");
-
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+          const canvas = await renderPage(page);
           const imageData = canvas.toDataURL("image/png");
           const base64Data = imageData.replace(/^data:image\/png;base64,/, "");
-          const filename = `page-${page}.${format}`;
-          zip.file(filename, base64Data, { base64: true });
+          zip.file(`page-${page}.png`, base64Data, { base64: true });
         }
 
         const blob = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${selectedCampaign.name}-pages.zip`;
+        a.download = `${selectedCampaign.name}-brochure.zip`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        setDownloading(null);
         toast({
           title: t("common.success"),
           description: `Downloaded ${totalPages} pages as ZIP`,
@@ -175,13 +220,12 @@ export default function SharingPage() {
       }
     } catch (error) {
       console.error("Download error:", error);
+      setDownloading(null);
       toast({
         title: t("common.error"),
-        description: `Failed to download campaign as ${format.toUpperCase()}`,
+        description: `Failed to download brochure`,
         variant: "destructive",
       });
-    } finally {
-      setDownloading(null);
     }
   };
 
@@ -298,7 +342,7 @@ export default function SharingPage() {
                     <SelectValue placeholder="Select a campaign" />
                   </SelectTrigger>
                   <SelectContent>
-                    {campaigns?.filter(c => c.status === "active" || c.status === "completed").map((campaign) => (
+                    {campaigns?.map((campaign) => (
                       <SelectItem key={campaign.id} value={campaign.id}>
                         <div className="flex items-center gap-2">
                           <span>{campaign.name}</span>
