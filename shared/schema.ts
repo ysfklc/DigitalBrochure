@@ -120,6 +120,8 @@ export const campaigns = pgTable("campaigns", {
   description: text("description"),
   type: templateTypeEnum("type"),
   status: campaignStatusEnum("status").notNull().default("draft"),
+  language: text("language").default("tr"),
+  currency: text("currency").default("₺"),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   canvasData: jsonb("canvas_data"),

@@ -63,6 +63,38 @@ const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
   a4landscape: { width: 1123, height: 794 },
 };
 
+// Helper function to format date according to template format
+const formatCampaignDate = (date: Date | string | null | undefined, format: string): string => {
+  if (!date) return format;
+  
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return format;
+  
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear().toString();
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  switch (format) {
+    case 'DD/MM/YYYY':
+      return `${day}/${month}/${year}`;
+    case 'MM/DD/YYYY':
+      return `${month}/${day}/${year}`;
+    case 'YYYY-MM-DD':
+      return `${year}-${month}-${day}`;
+    case 'DD.MM.YYYY':
+      return `${day}.${month}.${year}`;
+    case 'DD MMM YYYY':
+      return `${day} ${monthNames[d.getMonth()]} ${year}`;
+    case 'MMMM DD, YYYY':
+      return `${monthNamesFull[d.getMonth()]} ${day}, ${year}`;
+    default:
+      return `${day}/${month}/${year}`;
+  }
+};
+
 function CampaignThumbnail({ campaign, template }: { campaign: Campaign; template?: Template }) {
   const canvasData = campaign.canvasData as any;
   const backgroundImageUrl = template?.backgroundImageUrl;
@@ -130,7 +162,7 @@ function CampaignThumbnail({ campaign, template }: { campaign: Campaign; templat
                 className="font-bold text-white leading-none"
                 style={{ fontSize: `${Math.max(labelHeight * 0.5, 5)}px` }}
               >
-                ${discountPrice || price}
+                {campaign.currency || '₺'}{discountPrice || price}
               </span>
             </div>
           )}
@@ -196,6 +228,27 @@ function CampaignThumbnail({ campaign, template }: { campaign: Campaign; templat
           </svg>
         );
       }
+    }
+
+    if (element.type === 'date') {
+      const dateData = element.data;
+      const displayDate = formatCampaignDate(campaign?.startDate, dateData?.format || 'DD/MM/YYYY');
+      
+      return (
+        <div
+          className="w-full h-full flex items-center overflow-hidden"
+          style={{
+            fontFamily: dateData?.fontFamily,
+            fontSize: `${(dateData?.fontSize || 12) * scale * 0.3}px`,
+            fontWeight: dateData?.fontWeight,
+            fontStyle: dateData?.fontStyle,
+            color: dateData?.color,
+            backgroundColor: dateData?.backgroundColor === 'transparent' ? 'transparent' : dateData?.backgroundColor,
+          }}
+        >
+          <span className="truncate px-0.5">{displayDate}</span>
+        </div>
+      );
     }
     
     return null;

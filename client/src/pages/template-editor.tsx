@@ -27,7 +27,8 @@ import {
   PanelTop,
   PanelBottom,
   Pencil,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +69,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Template } from "@shared/schema";
 
 type CanvasSizeKey = 'square' | 'portrait' | 'landscape' | 'a4portrait' | 'a4landscape';
-type ToolType = 'select' | 'text' | 'shape' | 'draw' | 'image';
+type ToolType = 'select' | 'text' | 'shape' | 'draw' | 'image' | 'date';
 type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'line';
 
 const CANVAS_SIZES: Record<CanvasSizeKey, { width: number; height: number; label: string; ratio: string }> = {
@@ -118,7 +119,7 @@ const PRESET_COLORS = [
 
 interface CanvasElement {
   id: string;
-  type: 'text' | 'shape' | 'image' | 'header' | 'footer';
+  type: 'text' | 'shape' | 'image' | 'header' | 'footer' | 'date';
   x: number;
   y: number;
   width: number;
@@ -127,6 +128,17 @@ interface CanvasElement {
   opacity: number;
   data: any;
   page: number;
+}
+
+interface DateElementData {
+  format: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  backgroundColor: string;
 }
 
 interface TextElementData {
@@ -240,6 +252,17 @@ export default function TemplateEditorPage() {
       }
     }
   }, [template, currentPage]);
+
+  // Clamp header/footer heights when canvas size changes
+  useEffect(() => {
+    const maxHeight = Math.floor(CANVAS_SIZES[canvasSize].height / 2);
+    if (headerHeight > maxHeight) {
+      setHeaderHeight(maxHeight);
+    }
+    if (footerHeight > maxHeight) {
+      setFooterHeight(maxHeight);
+    }
+  }, [canvasSize]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -472,6 +495,41 @@ export default function TemplateEditorPage() {
     setActiveTool('select');
   };
 
+  const addDateElement = (clickX: number, clickY: number) => {
+    if (!canvasRef.current) return;
+    
+    const elementWidth = 180;
+    const elementHeight = 40;
+    const x = Math.max(0, clickX - elementWidth / 2);
+    const y = Math.max(0, clickY - elementHeight / 2);
+    
+    const newElement: CanvasElement = {
+      id: `date-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: 'date',
+      x,
+      y,
+      width: elementWidth,
+      height: elementHeight,
+      rotation: 0,
+      opacity: 100,
+      data: {
+        format: 'DD/MM/YYYY',
+        fontFamily: 'Inter',
+        fontSize: 16,
+        fontWeight: 'normal',
+        fontStyle: 'normal',
+        textAlign: 'center',
+        color: textColor,
+        backgroundColor: 'transparent',
+      } as DateElementData,
+      page: currentPage,
+    };
+    
+    setCanvasElements((prev) => [...prev, newElement]);
+    setSelectedElement(newElement.id);
+    setActiveTool('select');
+  };
+
   const handleCanvasClick = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
     
@@ -486,6 +544,11 @@ export default function TemplateEditorPage() {
     
     if (activeTool === 'shape') {
       addShapeElement(activeShapeType, clickX, clickY);
+      return;
+    }
+    
+    if (activeTool === 'date') {
+      addDateElement(clickX, clickY);
       return;
     }
     
@@ -804,6 +867,29 @@ export default function TemplateEditorPage() {
         );
       }
     }
+
+    if (element.type === 'date') {
+      const dateData = element.data as DateElementData;
+      return (
+        <div
+          className="w-full h-full flex items-center overflow-hidden border-2 border-dashed border-orange-400"
+          style={{
+            fontFamily: dateData.fontFamily,
+            fontSize: `${dateData.fontSize * scale}px`,
+            fontWeight: dateData.fontWeight,
+            fontStyle: dateData.fontStyle,
+            textAlign: dateData.textAlign,
+            color: dateData.color,
+            backgroundColor: dateData.backgroundColor === 'transparent' ? 'transparent' : dateData.backgroundColor,
+          }}
+        >
+          <span className="w-full px-1 flex items-center justify-center gap-1">
+            <Calendar className="inline-block" style={{ width: `${dateData.fontSize * scale * 0.8}px`, height: `${dateData.fontSize * scale * 0.8}px` }} />
+            {dateData.format}
+          </span>
+        </div>
+      );
+    }
     
     return null;
   };
@@ -921,6 +1007,20 @@ export default function TemplateEditorPage() {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">{t("editor.textTool")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={activeTool === 'date' ? 'default' : 'ghost'}
+                size="icon"
+                onClick={() => setActiveTool('date')}
+                data-testid="tool-date"
+              >
+                <Calendar className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("editor.datePlaceholder")}</TooltipContent>
           </Tooltip>
 
           <Popover>
@@ -1439,6 +1539,137 @@ export default function TemplateEditorPage() {
                   </div>
                 )}
 
+                {selectedElementData.type === 'date' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs">{t("editor.dateFormat")}</Label>
+                      <Select
+                        value={selectedElementData.data.format}
+                        onValueChange={(v) => updateElementData('format', v)}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-date-format">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                          <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                          <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                          <SelectItem value="DD.MM.YYYY">DD.MM.YYYY</SelectItem>
+                          <SelectItem value="DD MMM YYYY">DD MMM YYYY</SelectItem>
+                          <SelectItem value="MMMM DD, YYYY">MMMM DD, YYYY</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("editor.fontFamily")}</Label>
+                      <Select
+                        value={selectedElementData.data.fontFamily}
+                        onValueChange={(v) => updateElementData('fontFamily', v)}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-date-font-family">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FONT_FAMILIES.map((font) => (
+                            <SelectItem key={font.value} value={font.value}>
+                              <span style={{ fontFamily: font.value }}>{font.label}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("editor.fontSize")}</Label>
+                      <Select
+                        value={String(selectedElementData.data.fontSize)}
+                        onValueChange={(v) => updateElementData('fontSize', Number(v))}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-date-font-size">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FONT_SIZES.map((size) => (
+                            <SelectItem key={size} value={String(size)}>
+                              {size}px
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={selectedElementData.data.fontWeight === 'bold' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => updateElementData('fontWeight', selectedElementData.data.fontWeight === 'bold' ? 'normal' : 'bold')}
+                      >
+                        <Bold className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={selectedElementData.data.fontStyle === 'italic' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => updateElementData('fontStyle', selectedElementData.data.fontStyle === 'italic' ? 'normal' : 'italic')}
+                      >
+                        <Italic className="h-4 w-4" />
+                      </Button>
+                      <Separator orientation="vertical" className="h-6 mx-1" />
+                      <Button
+                        variant={selectedElementData.data.textAlign === 'left' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => updateElementData('textAlign', 'left')}
+                      >
+                        <AlignLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={selectedElementData.data.textAlign === 'center' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => updateElementData('textAlign', 'center')}
+                      >
+                        <AlignCenter className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={selectedElementData.data.textAlign === 'right' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => updateElementData('textAlign', 'right')}
+                      >
+                        <AlignRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("editor.textColor")}</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="color"
+                          value={selectedElementData.data.color}
+                          onChange={(e) => updateElementData('color', e.target.value)}
+                          className="w-10 h-8 p-1"
+                        />
+                        <Input
+                          value={selectedElementData.data.color}
+                          onChange={(e) => updateElementData('color', e.target.value)}
+                          className="flex-1"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("editor.backgroundColor")}</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="color"
+                          value={selectedElementData.data.backgroundColor === 'transparent' ? '#ffffff' : selectedElementData.data.backgroundColor}
+                          onChange={(e) => updateElementData('backgroundColor', e.target.value)}
+                          className="w-10 h-8 p-1"
+                        />
+                        <Input
+                          value={selectedElementData.data.backgroundColor}
+                          onChange={(e) => updateElementData('backgroundColor', e.target.value)}
+                          className="flex-1"
+                          placeholder="transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <Separator />
 
                 <div className="space-y-3">
@@ -1571,7 +1802,7 @@ export default function TemplateEditorPage() {
                     value={[headerHeight]}
                     onValueChange={([v]) => setHeaderHeight(v)}
                     min={40}
-                    max={200}
+                    max={Math.floor(CANVAS_SIZES[canvasSize].height / 2)}
                     step={10}
                     className="mt-2"
                   />
@@ -1585,7 +1816,7 @@ export default function TemplateEditorPage() {
                     value={[footerHeight]}
                     onValueChange={([v]) => setFooterHeight(v)}
                     min={30}
-                    max={150}
+                    max={Math.floor(CANVAS_SIZES[canvasSize].height / 2)}
                     step={10}
                     className="mt-2"
                   />

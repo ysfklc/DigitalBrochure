@@ -2072,15 +2072,57 @@ async function executeConnectorSearch(connector: any, searchQuery: string): Prom
   }
 
   // Map fields according to fieldMappings
-  const mappings = fieldMappings as { name: string; image: string; price?: string; sku?: string };
-  return products.map((item: any) => ({
-    id: `external-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    name: getValueByPath(item, mappings.name || "") || "Unknown Product",
-    imageUrl: getValueByPath(item, mappings.image || "") || "",
-    price: getValueByPath(item, mappings.price || "") || "0",
-    sku: getValueByPath(item, mappings.sku || "") || "",
-    isExternal: true,
-  }));
+  interface UnitMapping {
+    from: string;
+    to: string;
+  }
+  const mappings = fieldMappings as { 
+    name: string; 
+    image: string; 
+    price?: string; 
+    unit?: string; 
+    unitMappings?: UnitMapping[]; 
+  };
+  
+  // Function to apply unit mappings
+  const applyUnitMapping = (rawUnit: string): string => {
+    if (!rawUnit) return "Adet"; // Default unit
+    
+    const unitMappings = mappings.unitMappings || [];
+    const lowerRawUnit = rawUnit.toLowerCase().trim();
+    
+    // Find matching mapping
+    for (const mapping of unitMappings) {
+      if (mapping.from.toLowerCase().trim() === lowerRawUnit) {
+        return mapping.to;
+      }
+    }
+    
+    // If no mapping found, check if rawUnit is already a valid unit
+    const validUnits = [
+      "g", "kg", "ml", "l", "Adet", "Demet", "Paket", "Kasa", "Karton", 
+      "Rulo", "Poşet", "Tabak", "Bardak", "Çuval", "Konserve kutusu", 
+      "Şişe", "Bidon", "Çift", "Dilim", "Porsiyon", "Kova", "File"
+    ];
+    
+    // Check if rawUnit matches any valid unit (case-insensitive)
+    const matchedUnit = validUnits.find(u => u.toLowerCase() === lowerRawUnit);
+    if (matchedUnit) return matchedUnit;
+    
+    return rawUnit || "Adet"; // Return as-is or default
+  };
+  
+  return products.map((item: any) => {
+    const rawUnit = getValueByPath(item, mappings.unit || "") || "";
+    return {
+      id: `external-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: getValueByPath(item, mappings.name || "") || "Unknown Product",
+      imageUrl: getValueByPath(item, mappings.image || "") || "",
+      price: getValueByPath(item, mappings.price || "") || "0",
+      unit: applyUnitMapping(rawUnit),
+      isExternal: true,
+    };
+  });
 }
 
 function parseJsonPath(data: any, path: string): any {

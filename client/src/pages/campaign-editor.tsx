@@ -35,7 +35,8 @@ import {
   AlignRight,
   Palette,
   PanelTop,
-  PanelBottom
+  PanelBottom,
+  Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,7 +129,7 @@ const PRESET_COLORS = [
 
 interface CanvasElement {
   id: string;
-  type: 'product' | 'text' | 'shape' | 'image' | 'header' | 'footer';
+  type: 'product' | 'text' | 'shape' | 'image' | 'header' | 'footer' | 'date';
   x: number;
   y: number;
   width: number;
@@ -169,6 +170,49 @@ interface DrawElementData {
   strokeWidth: number;
 }
 
+interface DateElementData {
+  format: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  backgroundColor: string;
+}
+
+// Helper function to format date according to template format
+const formatCampaignDate = (date: Date | string | null | undefined, format: string): string => {
+  if (!date) return format; // Return format as placeholder if no date
+  
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return format;
+  
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear().toString();
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  switch (format) {
+    case 'DD/MM/YYYY':
+      return `${day}/${month}/${year}`;
+    case 'MM/DD/YYYY':
+      return `${month}/${day}/${year}`;
+    case 'YYYY-MM-DD':
+      return `${year}-${month}-${day}`;
+    case 'DD.MM.YYYY':
+      return `${day}.${month}.${year}`;
+    case 'DD MMM YYYY':
+      return `${day} ${monthNames[d.getMonth()]} ${year}`;
+    case 'MMMM DD, YYYY':
+      return `${monthNamesFull[d.getMonth()]} ${day}, ${year}`;
+    default:
+      return `${day}/${month}/${year}`;
+  }
+};
+
 export default function CampaignEditorPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -195,6 +239,14 @@ export default function CampaignEditorPage() {
   const [savedCampaignId, setSavedCampaignId] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [tempCampaignName, setTempCampaignName] = useState("");
+  const [campaignLanguage, setCampaignLanguage] = useState("tr");
+  const [campaignCurrency, setCampaignCurrency] = useState("₺");
+
+  const LANGUAGE_CURRENCY_MAP: Record<string, { label: string; currency: string }> = {
+    tr: { label: "Türkçe", currency: "₺" },
+    de: { label: "Deutsch", currency: "€" },
+    en: { label: "English", currency: "$" },
+  };
   
   const [activeTool, setActiveTool] = useState<ToolType>('select');
   const [activeShapeType, setActiveShapeType] = useState<ShapeType>('rectangle');
@@ -407,6 +459,15 @@ export default function CampaignEditorPage() {
       setCampaignName(campaign.name);
       setSavedCampaignId(campaign.id);
       
+      // Load campaign language and currency
+      if (campaign.language) {
+        setCampaignLanguage(campaign.language);
+        setCampaignCurrency(LANGUAGE_CURRENCY_MAP[campaign.language]?.currency || "₺");
+      }
+      if (campaign.currency) {
+        setCampaignCurrency(campaign.currency);
+      }
+      
       // Wait for campaignProducts to be loaded if id is not "new"
       if (id !== "new" && campaignProducts === undefined) {
         return; // Wait for products to load
@@ -594,6 +655,8 @@ export default function CampaignEditorPage() {
       name: name,
       canvasData,
       status: "draft" as const,
+      language: campaignLanguage,
+      currency: campaignCurrency,
     };
 
     if (savedCampaignId || (id && id !== "new")) {
@@ -1233,7 +1296,7 @@ export default function CampaignEditorPage() {
                       color: labelTextConfig.color || '#ffffff',
                     }}
                   >
-                    ${price}
+                    {campaignCurrency}{price}
                   </p>
                 )}
                 {/* Discounted/Current price */}
@@ -1246,7 +1309,7 @@ export default function CampaignEditorPage() {
                     color: priceConfig.color || '#ffffff',
                   }}
                 >
-                  ${discountPrice || price}
+                  {campaignCurrency}{discountPrice || price}
                 </p>
                 {/* Unit */}
                 <p 
@@ -1361,6 +1424,31 @@ export default function CampaignEditorPage() {
           </svg>
         );
       }
+    }
+
+    if (element.type === 'date') {
+      const dateData = element.data as DateElementData;
+      // Use campaign dates - show start date by default, can be extended to support end date
+      const displayDate = formatCampaignDate(campaign?.startDate, dateData.format);
+      
+      return (
+        <div
+          className="w-full h-full flex items-center overflow-hidden"
+          style={{
+            fontFamily: dateData.fontFamily,
+            fontSize: `${dateData.fontSize * scale}px`,
+            fontWeight: dateData.fontWeight,
+            fontStyle: dateData.fontStyle,
+            textAlign: dateData.textAlign,
+            color: dateData.color,
+            backgroundColor: dateData.backgroundColor === 'transparent' ? 'transparent' : dateData.backgroundColor,
+          }}
+        >
+          <span className="w-full px-1" style={{ textAlign: dateData.textAlign }}>
+            {displayDate}
+          </span>
+        </div>
+      );
     }
     
     return null;
@@ -2382,22 +2470,45 @@ export default function CampaignEditorPage() {
               {t("campaigns.enterCampaignName")}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="campaign-name">{t("campaigns.campaignName")}</Label>
-            <Input
-              id="campaign-name"
-              value={tempCampaignName}
-              onChange={(e) => setTempCampaignName(e.target.value)}
-              placeholder={t("campaigns.enterName")}
-              className="mt-2"
-              data-testid="input-campaign-name"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleSaveDialogConfirm();
-                }
-              }}
-            />
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="campaign-name">{t("campaigns.campaignName")}</Label>
+              <Input
+                id="campaign-name"
+                value={tempCampaignName}
+                onChange={(e) => setTempCampaignName(e.target.value)}
+                placeholder={t("campaigns.enterName")}
+                className="mt-2"
+                data-testid="input-campaign-name"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSaveDialogConfirm();
+                  }
+                }}
+              />
+            </div>
+            <div>
+              <Label>{t("campaigns.language")}</Label>
+              <Select
+                value={campaignLanguage}
+                onValueChange={(value) => {
+                  setCampaignLanguage(value);
+                  setCampaignCurrency(LANGUAGE_CURRENCY_MAP[value]?.currency || "₺");
+                }}
+              >
+                <SelectTrigger className="mt-2" data-testid="select-campaign-language">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(LANGUAGE_CURRENCY_MAP).map(([code, { label, currency }]) => (
+                    <SelectItem key={code} value={code}>
+                      {label} ({currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSaveDialog(false)} data-testid="button-cancel-save">

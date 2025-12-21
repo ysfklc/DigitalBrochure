@@ -21,7 +21,7 @@ const CANVAS_SIZES: Record<CanvasSizeKey, { width: number; height: number; label
 
 interface CanvasElement {
   id: string;
-  type: 'product' | 'text' | 'shape' | 'image' | 'header' | 'footer';
+  type: 'product' | 'text' | 'shape' | 'image' | 'header' | 'footer' | 'date';
   x: number;
   y: number;
   width: number;
@@ -55,6 +55,49 @@ interface DrawingPoint {
   x: number;
   y: number;
 }
+
+interface DateElementData {
+  format: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  backgroundColor: string;
+}
+
+// Helper function to format date according to template format
+const formatCampaignDate = (date: Date | string | null | undefined, format: string): string => {
+  if (!date) return format;
+  
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return format;
+  
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear().toString();
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  switch (format) {
+    case 'DD/MM/YYYY':
+      return `${day}/${month}/${year}`;
+    case 'MM/DD/YYYY':
+      return `${month}/${day}/${year}`;
+    case 'YYYY-MM-DD':
+      return `${year}-${month}-${day}`;
+    case 'DD.MM.YYYY':
+      return `${day}.${month}.${year}`;
+    case 'DD MMM YYYY':
+      return `${day} ${monthNames[d.getMonth()]} ${year}`;
+    case 'MMMM DD, YYYY':
+      return `${monthNamesFull[d.getMonth()]} ${day}, ${year}`;
+    default:
+      return `${day}/${month}/${year}`;
+  }
+};
 
 export default function CampaignPreviewPage() {
   const { t } = useTranslation();
@@ -174,7 +217,7 @@ export default function CampaignPreviewPage() {
                       color: labelTextConfig.color || '#ffffff',
                     }}
                   >
-                    ${price}
+                    {campaign?.currency || '₺'}{price}
                   </p>
                 )}
                 <p 
@@ -186,7 +229,7 @@ export default function CampaignPreviewPage() {
                     color: priceConfig.color || '#ffffff',
                   }}
                 >
-                  ${discountPrice || price}
+                  {campaign?.currency || '₺'}{discountPrice || price}
                 </p>
                 <p 
                   className="opacity-80"
@@ -300,6 +343,30 @@ export default function CampaignPreviewPage() {
           </svg>
         );
       }
+    }
+
+    if (element.type === 'date') {
+      const dateData = element.data as DateElementData;
+      const displayDate = formatCampaignDate(campaign?.startDate, dateData.format);
+      
+      return (
+        <div
+          className="w-full h-full flex items-center overflow-hidden"
+          style={{
+            fontFamily: dateData.fontFamily,
+            fontSize: `${dateData.fontSize * scale}px`,
+            fontWeight: dateData.fontWeight,
+            fontStyle: dateData.fontStyle,
+            textAlign: dateData.textAlign,
+            color: dateData.color,
+            backgroundColor: dateData.backgroundColor === 'transparent' ? 'transparent' : dateData.backgroundColor,
+          }}
+        >
+          <span className="w-full px-1" style={{ textAlign: dateData.textAlign }}>
+            {displayDate}
+          </span>
+        </div>
+      );
     }
     
     return null;

@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send, Plus, Trash2, Edit, Link, TestTube, Lightbulb, Clock, CheckCircle, CheckCheck } from "lucide-react";
+import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send, Plus, Trash2, Edit, Link, TestTube, Lightbulb, Clock, CheckCircle, CheckCheck, ArrowRight } from "lucide-react";
 import { useRoleVerification } from "@/lib/use-role-verification";
 import type { ProductConnector, Suggestion } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
@@ -49,12 +49,24 @@ interface RequestParam {
   value: string;
 }
 
+interface UnitMapping {
+  from: string;
+  to: string;
+}
+
 interface FieldMappings {
   name: string;
   image: string;
   price?: string;
-  sku?: string;
+  unit?: string;
+  unitMappings?: UnitMapping[];
 }
+
+const UNIT_OPTIONS = [
+  "g", "kg", "ml", "l", "Adet", "Demet", "Paket", "Kasa", "Karton", 
+  "Rulo", "Poşet", "Tabak", "Bardak", "Çuval", "Konserve kutusu", 
+  "Şişe", "Bidon", "Çift", "Dilim", "Porsiyon", "Kova", "File"
+];
 
 interface ConnectorFormData {
   name: string;
@@ -79,7 +91,7 @@ const emptyConnectorForm: ConnectorFormData = {
   requestParams: [{ key: "", value: "" }],
   requestBody: "",
   responseParser: "$.data",
-  fieldMappings: { name: "name", image: "imageUrl", price: "price", sku: "sku" },
+  fieldMappings: { name: "name", image: "imageUrl", price: "price", unit: "unit", unitMappings: [] },
 };
 
 export default function SettingsPage() {
@@ -1008,17 +1020,101 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm">{t("settings.fieldSku")}</Label>
+                    <Label className="text-sm">{t("settings.fieldUnit")}</Label>
                     <Input
-                      value={connectorForm.fieldMappings.sku || ""}
+                      value={connectorForm.fieldMappings.unit || ""}
                       onChange={(e) => setConnectorForm({
                         ...connectorForm,
-                        fieldMappings: { ...connectorForm.fieldMappings, sku: e.target.value }
+                        fieldMappings: { ...connectorForm.fieldMappings, unit: e.target.value }
                       })}
-                      placeholder="sku"
-                      data-testid="input-field-sku"
+                      placeholder="unit"
+                      data-testid="input-field-unit"
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>{t("settings.unitMappings")}</Label>
+                    <p className="text-xs text-muted-foreground">{t("settings.unitMappingsHint")}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConnectorForm({
+                      ...connectorForm,
+                      fieldMappings: {
+                        ...connectorForm.fieldMappings,
+                        unitMappings: [...(connectorForm.fieldMappings.unitMappings || []), { from: "", to: "Adet" }]
+                      }
+                    })}
+                    data-testid="button-add-unit-mapping"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("common.add")}
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {(connectorForm.fieldMappings.unitMappings || []).map((mapping, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={mapping.from}
+                        onChange={(e) => {
+                          const newMappings = [...(connectorForm.fieldMappings.unitMappings || [])];
+                          newMappings[index] = { ...newMappings[index], from: e.target.value };
+                          setConnectorForm({
+                            ...connectorForm,
+                            fieldMappings: { ...connectorForm.fieldMappings, unitMappings: newMappings }
+                          });
+                        }}
+                        placeholder={t("settings.unitMappingFrom")}
+                        className="flex-1"
+                        data-testid={`input-unit-from-${index}`}
+                      />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <Select
+                        value={mapping.to}
+                        onValueChange={(value) => {
+                          const newMappings = [...(connectorForm.fieldMappings.unitMappings || [])];
+                          newMappings[index] = { ...newMappings[index], to: value };
+                          setConnectorForm({
+                            ...connectorForm,
+                            fieldMappings: { ...connectorForm.fieldMappings, unitMappings: newMappings }
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="w-[140px]" data-testid={`select-unit-to-${index}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {UNIT_OPTIONS.map((unit) => (
+                            <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newMappings = (connectorForm.fieldMappings.unitMappings || []).filter((_, i) => i !== index);
+                          setConnectorForm({
+                            ...connectorForm,
+                            fieldMappings: { ...connectorForm.fieldMappings, unitMappings: newMappings }
+                          });
+                        }}
+                        data-testid={`button-remove-unit-mapping-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {(!connectorForm.fieldMappings.unitMappings || connectorForm.fieldMappings.unitMappings.length === 0) && (
+                    <p className="text-xs text-muted-foreground italic">{t("settings.noUnitMappings")}</p>
+                  )}
                 </div>
               </div>
 
