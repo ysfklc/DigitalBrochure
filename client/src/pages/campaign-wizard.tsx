@@ -62,6 +62,9 @@ interface SelectedProduct {
   campaignDiscountPrice: string;
   priceTagTemplateId: string | null;
   isExternal?: boolean;
+  editableName: string;
+  currency: string;
+  unit: string;
 }
 
 const STEPS = [
@@ -527,6 +530,9 @@ export default function CampaignWizardPage() {
           campaignPrice: product.price?.toString() || "",
           campaignDiscountPrice: product.discountPrice?.toString() || "",
           priceTagTemplateId: null,
+          editableName: product.name,
+          currency: "₺",
+          unit: "Piece",
         },
       ]);
     }
@@ -565,6 +571,9 @@ export default function CampaignWizardPage() {
           campaignDiscountPrice: connectorProduct.discountPrice?.toString() || "",
           priceTagTemplateId: null,
           isExternal: true,
+          editableName: connectorProduct.name,
+          currency: "₺",
+          unit: "Piece",
         },
       ]);
     }
@@ -587,6 +596,14 @@ export default function CampaignWizardPage() {
     setSelectedProducts(
       selectedProducts.map((sp) =>
         sp.productId === productId ? { ...sp, priceTagTemplateId } : sp
+      )
+    );
+  };
+
+  const updateProductProperty = (productId: string, field: "editableName" | "currency" | "unit", value: string) => {
+    setSelectedProducts(
+      selectedProducts.map((sp) =>
+        sp.productId === productId ? { ...sp, [field]: value } : sp
       )
     );
   };
@@ -993,7 +1010,16 @@ export default function CampaignWizardPage() {
                         />
                       )}
                       <div className="flex-1 space-y-3">
-                        <p className="font-medium">{sp.product.name}</p>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Name</Label>
+                          <Input
+                            value={sp.editableName}
+                            onChange={(e) => updateProductProperty(sp.productId, "editableName", e.target.value)}
+                            placeholder="Product name"
+                            className="h-8"
+                            data-testid={`input-name-${sp.productId}`}
+                          />
+                        </div>
                         
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1">
@@ -1008,6 +1034,25 @@ export default function CampaignWizardPage() {
                             />
                           </div>
                           <div className="space-y-1">
+                            <Label className="text-xs">Currency</Label>
+                            <Select
+                              value={sp.currency}
+                              onValueChange={(value) => updateProductProperty(sp.productId, "currency", value)}
+                            >
+                              <SelectTrigger className="h-8" data-testid={`select-currency-${sp.productId}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="₺">₺</SelectItem>
+                                <SelectItem value="$">$</SelectItem>
+                                <SelectItem value="€">€</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
                             <Label className="text-xs">{t("wizard.discountPrice")}</Label>
                             <Input
                               type="number"
@@ -1018,26 +1063,41 @@ export default function CampaignWizardPage() {
                               data-testid={`input-discount-${sp.productId}`}
                             />
                           </div>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <Label className="text-xs">{t("wizard.priceTag")}</Label>
-                          <Select
-                            value={sp.priceTagTemplateId || "none"}
-                            onValueChange={(value) => updateProductPriceTag(sp.productId, value === "none" ? null : value)}
-                          >
-                            <SelectTrigger className="h-8" data-testid={`select-price-tag-${sp.productId}`}>
-                              <SelectValue placeholder={t("wizard.selectPriceTag")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">{t("common.none")}</SelectItem>
-                              {priceTagTemplates?.map((ptt) => (
-                                <SelectItem key={ptt.id} value={ptt.id}>
-                                  {ptt.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Unit</Label>
+                            <Select
+                              value={sp.unit}
+                              onValueChange={(value) => updateProductProperty(sp.productId, "unit", value)}
+                            >
+                              <SelectTrigger className="h-8" data-testid={`select-unit-${sp.productId}`}>
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="g">g</SelectItem>
+                                <SelectItem value="kg">kg</SelectItem>
+                                <SelectItem value="ml">ml</SelectItem>
+                                <SelectItem value="l">l</SelectItem>
+                                <SelectItem value="Piece">Piece</SelectItem>
+                                <SelectItem value="Bunch">Bunch</SelectItem>
+                                <SelectItem value="Pack">Pack</SelectItem>
+                                <SelectItem value="Case">Case</SelectItem>
+                                <SelectItem value="Carton">Carton</SelectItem>
+                                <SelectItem value="Roll">Roll</SelectItem>
+                                <SelectItem value="Bag">Bag</SelectItem>
+                                <SelectItem value="Plate">Plate</SelectItem>
+                                <SelectItem value="Glass">Glass</SelectItem>
+                                <SelectItem value="Sack">Sack</SelectItem>
+                                <SelectItem value="Can">Can</SelectItem>
+                                <SelectItem value="Bottle">Bottle</SelectItem>
+                                <SelectItem value="Drum">Drum</SelectItem>
+                                <SelectItem value="Pair">Pair</SelectItem>
+                                <SelectItem value="Slice">Slice</SelectItem>
+                                <SelectItem value="Portion">Portion</SelectItem>
+                                <SelectItem value="Bucket">Bucket</SelectItem>
+                                <SelectItem value="Net bag">Net bag</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
                     </div>

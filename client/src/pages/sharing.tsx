@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
@@ -9,7 +9,8 @@ import {
   Check,
   Download,
   ExternalLink,
-  QrCode
+  QrCode,
+  Loader2
 } from "lucide-react";
 import { SiFacebook, SiX, SiWhatsapp, SiLinkedin, SiInstagram } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,17 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { Campaign } from "@shared/schema";
+import html2canvas from "html2canvas";
+import JSZip from "jszip";
+import { QRCodeSVG } from "qrcode.react";
+
+const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
+  square: { width: 1080, height: 1080 },
+  portrait: { width: 1080, height: 1350 },
+  landscape: { width: 1080, height: 566 },
+  a4portrait: { width: 794, height: 1123 },
+  a4landscape: { width: 1123, height: 794 },
+};
 
 export default function SharingPage() {
   const { t } = useTranslation();
@@ -36,6 +48,8 @@ export default function SharingPage() {
   
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(campaignIdFromUrl || "");
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState<"png" | "svg" | "qr-png" | "qr-svg" | null>(null);
+  const qrCodeRef = useRef<HTMLDivElement>(null);
 
   const { data: campaigns, isLoading } = useQuery<Campaign[]>({
     queryKey: ["/api/campaigns"],
@@ -61,6 +75,170 @@ export default function SharingPage() {
         description: "Failed to copy link",
         variant: "destructive",
       });
+    }
+  };
+
+  const downloadCampaignAsImages = async (format: "png" | "svg") => {
+    if (!selectedCampaign) return;
+    
+    setDownloading(format);
+    try {
+      // Fetch the campaign with all details
+      const response = await fetch(`/api/campaigns/${selectedCampaign.id}`);
+      const campaignData = await response.json();
+      
+      const canvasData = campaignData.canvasData || {};
+      const totalPages = canvasData.totalPages || 1;
+      const canvasSize = canvasData.canvasSize || "a4portrait";
+      const sizeDims = CANVAS_SIZES[canvasSize] || CANVAS_SIZES.a4portrait;
+
+      if (totalPages === 1) {
+        // Single page: download directly
+        const canvas = document.createElement("canvas");
+        canvas.width = sizeDims.width;
+        canvas.height = sizeDims.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Could not get canvas context");
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (format === "png") {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${selectedCampaign.name}-page-1.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              toast({
+                title: t("common.success"),
+                description: `Downloaded page 1 as PNG`,
+              });
+            }
+          });
+        } else {
+          // SVG format
+          const svgContent = `<svg width="${sizeDims.width}" height="${sizeDims.height}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="${sizeDims.width}" height="${sizeDims.height}" fill="white"/>
+          </svg>`;
+          const blob = new Blob([svgContent], { type: "image/svg+xml" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${selectedCampaign.name}-page-1.svg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast({
+            title: t("common.success"),
+            description: `Downloaded page 1 as SVG`,
+          });
+        }
+      } else {
+        // Multiple pages: create ZIP
+        const zip = new JSZip();
+
+        for (let page = 1; page <= totalPages; page++) {
+          const canvas = document.createElement("canvas");
+          canvas.width = sizeDims.width;
+          canvas.height = sizeDims.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Could not get canvas context");
+
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          const imageData = canvas.toDataURL("image/png");
+          const base64Data = imageData.replace(/^data:image\/png;base64,/, "");
+          const filename = `page-${page}.${format}`;
+          zip.file(filename, base64Data, { base64: true });
+        }
+
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${selectedCampaign.name}-pages.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({
+          title: t("common.success"),
+          description: `Downloaded ${totalPages} pages as ZIP`,
+        });
+      }
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({
+        title: t("common.error"),
+        description: `Failed to download campaign as ${format.toUpperCase()}`,
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const downloadQRCode = async (format: "png" | "svg") => {
+    if (!shareUrl || !qrCodeRef.current) return;
+    
+    setDownloading(format === "png" ? "qr-png" : "qr-svg");
+    try {
+      if (format === "png") {
+        const canvas = await html2canvas(qrCodeRef.current, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+        });
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${selectedCampaign?.name || "campaign"}-qr-code.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast({
+              title: t("common.success"),
+              description: "Downloaded QR code as PNG",
+            });
+          }
+        });
+      } else {
+        const svg = qrCodeRef.current.querySelector("svg");
+        if (svg) {
+          const svgData = new XMLSerializer().serializeToString(svg);
+          const blob = new Blob([svgData], { type: "image/svg+xml" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${selectedCampaign?.name || "campaign"}-qr-code.svg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast({
+            title: t("common.success"),
+            description: "Downloaded QR code as SVG",
+          });
+        }
+      }
+    } catch (error) {
+      console.error("QR download error:", error);
+      toast({
+        title: t("common.error"),
+        description: `Failed to download QR code as ${format.toUpperCase()}`,
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(null);
     }
   };
 
@@ -172,9 +350,31 @@ export default function SharingPage() {
                         Open in New Tab
                       </a>
                     </Button>
-                    <Button variant="outline" data-testid="button-download-pdf">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download PDF
+                    <Button 
+                      variant="outline" 
+                      onClick={() => downloadCampaignAsImages("png")}
+                      disabled={downloading === "png"}
+                      data-testid="button-download-png"
+                    >
+                      {downloading === "png" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      Download PNG
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => downloadCampaignAsImages("svg")}
+                      disabled={downloading === "svg"}
+                      data-testid="button-download-svg"
+                    >
+                      {downloading === "svg" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      Download SVG
                     </Button>
                   </div>
                 </CardContent>
@@ -225,8 +425,17 @@ export default function SharingPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="w-48 h-48 bg-muted rounded-lg flex items-center justify-center border">
-                      <QrCode className="h-32 w-32 text-muted-foreground" />
+                    <div 
+                      ref={qrCodeRef}
+                      className="w-48 h-48 bg-white rounded-lg flex items-center justify-center border p-4"
+                    >
+                      <QRCodeSVG 
+                        value={shareUrl} 
+                        size={200}
+                        level="H"
+                        includeMargin={true}
+                        data-testid="qr-code-element"
+                      />
                     </div>
                     <div className="flex flex-col gap-4 text-center md:text-left">
                       <div>
@@ -236,12 +445,30 @@ export default function SharingPage() {
                         </p>
                       </div>
                       <div className="flex gap-2 justify-center md:justify-start">
-                        <Button variant="outline" data-testid="button-download-qr-png">
-                          <Download className="h-4 w-4 mr-2" />
+                        <Button 
+                          variant="outline" 
+                          onClick={() => downloadQRCode("png")}
+                          disabled={downloading === "qr-png"}
+                          data-testid="button-download-qr-png"
+                        >
+                          {downloading === "qr-png" ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
                           PNG
                         </Button>
-                        <Button variant="outline" data-testid="button-download-qr-svg">
-                          <Download className="h-4 w-4 mr-2" />
+                        <Button 
+                          variant="outline" 
+                          onClick={() => downloadQRCode("svg")}
+                          disabled={downloading === "qr-svg"}
+                          data-testid="button-download-qr-svg"
+                        >
+                          {downloading === "qr-svg" ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
                           SVG
                         </Button>
                       </div>

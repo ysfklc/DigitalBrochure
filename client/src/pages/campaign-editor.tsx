@@ -1965,22 +1965,18 @@ export default function CampaignEditorPage() {
           >
             {showHeaderZone && (
               <div
-                className="absolute left-0 right-0 top-0 bg-blue-50/50 border-b-2 border-dashed border-blue-300 flex items-center justify-center"
+                className="absolute left-0 right-0 top-0 pointer-events-none"
                 style={{ height: `${scaledHeaderHeight}px` }}
                 data-testid="header-zone"
-              >
-                <span className="text-xs text-blue-400 font-medium">{t("editor.headerZone")}</span>
-              </div>
+              />
             )}
             
             {showFooterZone && (
               <div
-                className="absolute left-0 right-0 bottom-0 bg-green-50/50 border-t-2 border-dashed border-green-300 flex items-center justify-center"
+                className="absolute left-0 right-0 bottom-0 pointer-events-none"
                 style={{ height: `${scaledFooterHeight}px` }}
                 data-testid="footer-zone"
-              >
-                <span className="text-xs text-green-400 font-medium">{t("editor.footerZone")}</span>
-              </div>
+              />
             )}
 
             {currentPageElements.length === 0 && !isDrawing ? (

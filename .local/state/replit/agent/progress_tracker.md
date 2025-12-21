@@ -113,3 +113,64 @@
     - After creating a template via setup wizard, users are now redirected directly to the template editor
     - This allows them to immediately see their uploaded background image applied to the canvas
     - Previously users were redirected to the templates list and had to manually navigate to edit
+
+[x] 60. Environment migration completed (December 21, 2025):
+    - npm install completed successfully
+    - npm run db:push completed - schema synced
+    - Workflow restarted and running on port 5000
+    - Super admin user created successfully
+    - Application fully operational
+
+[x] 61. Made product properties editable in campaign wizard (December 21, 2025):
+    - Added editable Name field for each product
+    - Added Currency field with default value ₺
+    - Added Unit field (e.g., kg, piece)
+    - Removed Price Template selection dropdown
+    - Updated SelectedProduct interface with new properties
+    - Created updateProductProperty function for editing
+    - Updated toggleProductSelection and toggleConnectorProductSelection to initialize new fields
+    - Reorganized product form layout: Name (full width), Price + Currency (2 columns), Discount + Unit (2 columns)
+    - Workflow restarted and verified working on port 5000
+
+[x] 62. Made Currency and Unit fields selectable dropdowns (December 21, 2025):
+    - Converted Currency field from text input to Select component
+    - Added 3 currency options with proper values: ₺, $, €
+    - Converted Unit field from text input to Select component
+    - Added 23 unit options: g, kg, ml, l, Piece, Bunch, Pack, Case, Carton, Roll, Bag, Plate, Glass, Sack, Can, Bottle, Drum, Pair, Slice, Portion, Bucket, Net bag
+    - Fixed SelectItem validation: all items have non-empty value props
+    - Updated default unit from empty string to "Piece" to avoid Select validation errors
+    - Updated both toggleProductSelection and toggleConnectorProductSelection to initialize unit as "Piece"
+    - Workflow restarted and verified working on port 5000
+
+[x] 63. Made header and footer areas abstract placeholders with no visual effect (December 21, 2025):
+    - Removed background colors (bg-blue-50/50 and bg-green-50/50)
+    - Removed borders (border-b-2/border-t-2 dashed borders)
+    - Removed text labels ("Header Zone" and "Footer Zone")
+    - Added pointer-events-none to prevent interaction with placeholder divs
+    - Header and footer zones now function as abstract placeholders without visual impact
+    - Workflow restarted and verified working on port 5000
+
+[x] 64. Implemented PNG/SVG download functionality for campaigns (December 21, 2025):
+    - Installed html2canvas and jszip dependencies
+    - Added downloadCampaignAsImages handler in sharing.tsx
+    - Implemented single-page download: downloads directly as PNG or SVG
+    - Implemented multi-page download: zips all pages together
+    - Added download state tracking with loading spinner feedback
+    - Replaced "Download PDF" button with "Download PNG" and "Download SVG" buttons
+    - Both buttons now have click handlers and proper error handling
+    - Toast notifications provide user feedback on download success/failure
+    - Supports all canvas sizes: square, portrait, landscape, a4portrait, a4landscape
+    - Workflow restarted and verified working on port 5000
+
+[x] 65. Implemented QR Code generation in Sharing page (December 21, 2025):
+    - Imported QRCodeSVG from qrcode.react library (already installed)
+    - Added QR code display with actual generated code from share URL
+    - QR code level set to "H" (high error correction) and includeMargin enabled
+    - White background with border for clean display
+    - Implemented downloadQRCode handler for both PNG and SVG formats
+    - PNG download uses html2canvas with 2x scale for high resolution
+    - SVG download extracts and serializes the SVG element directly
+    - Added loading spinner feedback during download process
+    - Replaced placeholder icon with actual functional QR code
+    - Both PNG and SVG download buttons now have click handlers
+    - Workflow restarted and verified working on port 5000
