@@ -75,6 +75,12 @@ export default function CampaignPreviewPage() {
     enabled: !!id,
   });
 
+  // Fetch template for background image
+  const { data: template } = useQuery<any>({
+    queryKey: [`/api/templates/${campaign?.templateId}`],
+    enabled: !!campaign?.templateId,
+  });
+
   useEffect(() => {
     if (campaign?.canvasData) {
       const data = campaign.canvasData as any;
@@ -113,27 +119,88 @@ export default function CampaignPreviewPage() {
       const name = productData.name;
       const price = element.data.campaignPrice || productData.price;
       const discountPrice = element.data.campaignDiscountPrice || productData.discountPrice;
+      const unit = productData.unit || 'each';
+      
+      // Get price styling from template
+      const priceConfig = (template as any)?.discountedPriceConfig || {};
+      const labelTextConfig = (template as any)?.labelTextConfig || {};
+      const unitConfig = (template as any)?.unitOfMeasureConfig || {};
+      const labelImageUrl = (template as any)?.labelImageUrl;
+      
+      // Calculate price label dimensions - 1/6 of product size, positioned at bottom-right
+      const labelWidth = Math.max(element.width / 6, 50) * scale;
+      const labelHeight = Math.max(element.height / 6, 40) * scale;
       
       return (
-        <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col">
-          <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
+        <div className="w-full h-full relative overflow-visible">
+          {/* Product Image */}
+          <div className="absolute inset-0 flex items-center justify-center">
             {imageUrl ? (
               <img
                 src={imageUrl}
                 alt={name}
-                className="w-full h-full object-cover"
+                className="max-w-full max-h-full object-contain"
                 draggable={false}
               />
             ) : (
-              <Package className="h-8 w-8 text-muted-foreground" />
+              <div className="w-full h-full flex items-center justify-center bg-muted rounded">
+                <Package className="h-8 w-8 text-muted-foreground" />
+              </div>
             )}
           </div>
-          <div className="p-1 text-center bg-background">
-            <p className="text-xs font-medium truncate">{name}</p>
-            <p className="text-xs text-primary font-bold">
-              ${discountPrice || price}
-            </p>
-          </div>
+          
+          {/* Price Label - Bottom right corner */}
+          {(price || discountPrice) && (
+            <div 
+              className="absolute flex items-center justify-center rounded-sm overflow-hidden"
+              style={{ 
+                right: 0,
+                bottom: 0,
+                width: `${labelWidth}px`,
+                height: `${labelHeight}px`,
+                backgroundImage: labelImageUrl ? `url(${labelImageUrl})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundColor: labelImageUrl ? 'transparent' : 'hsl(var(--primary))',
+              }}
+            >
+              <div className="text-center px-0.5">
+                {discountPrice && price && (
+                  <p 
+                    className="line-through opacity-70"
+                    style={{
+                      fontFamily: labelTextConfig.fontFamily || 'Inter',
+                      fontSize: `${Math.max(8 * scale, 6)}px`,
+                      color: labelTextConfig.color || '#ffffff',
+                    }}
+                  >
+                    ${price}
+                  </p>
+                )}
+                <p 
+                  className="font-bold leading-tight"
+                  style={{
+                    fontFamily: priceConfig.fontFamily || 'Inter',
+                    fontSize: `${Math.max(12 * scale, 8)}px`,
+                    fontWeight: priceConfig.fontWeight || 'bold',
+                    color: priceConfig.color || '#ffffff',
+                  }}
+                >
+                  ${discountPrice || price}
+                </p>
+                <p 
+                  className="opacity-80"
+                  style={{
+                    fontFamily: unitConfig.fontFamily || 'Inter',
+                    fontSize: `${Math.max(6 * scale, 5)}px`,
+                    color: unitConfig.color || '#ffffff',
+                  }}
+                >
+                  /{unit}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -323,6 +390,9 @@ export default function CampaignPreviewPage() {
           style={{
             width: scaledCanvasWidth,
             height: scaledCanvasHeight,
+            backgroundImage: template?.backgroundImageUrl ? `url(${template.backgroundImageUrl})` : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
           data-testid="preview-canvas"
         >
@@ -350,7 +420,7 @@ export default function CampaignPreviewPage() {
                 width: element.width * scale,
                 height: element.height * scale,
                 transform: `rotate(${element.rotation}deg)`,
-                opacity: element.opacity,
+                opacity: (element.opacity || 100) / 100,
               }}
             >
               {renderElement(element)}

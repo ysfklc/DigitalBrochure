@@ -88,6 +88,197 @@ export default function CampaignWizardPage() {
   const [debouncedConnectorSearch, setDebouncedConnectorSearch] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
   const [productSourceTab, setProductSourceTab] = useState<"existing" | "connector">("existing");
+  const [productsPerPage, setProductsPerPage] = useState<number>(4);
+
+  // Canvas dimensions and layout configuration
+  const CANVAS_WIDTH = 595; // A4 width
+  const CANVAS_HEIGHT = 842; // A4 height
+  const DEFAULT_HEADER_HEIGHT = 80;
+  const DEFAULT_FOOTER_HEIGHT = 60;
+
+  // Get grid configuration for 1-8 products (columns x rows)
+  const getGridConfig = (count: number): { cols: number; rows: number } => {
+    switch (count) {
+      case 1: return { cols: 1, rows: 1 };
+      case 2: return { cols: 2, rows: 1 };
+      case 3: return { cols: 3, rows: 1 };
+      case 4: return { cols: 2, rows: 2 };
+      case 5: return { cols: 3, rows: 2 }; // 3 top, 2 bottom
+      case 6: return { cols: 3, rows: 2 };
+      case 7: return { cols: 4, rows: 2 }; // 4 top, 3 bottom
+      case 8: return { cols: 4, rows: 2 };
+      default: return { cols: 2, rows: 2 };
+    }
+  };
+
+  // Get special layout for odd product counts (5, 7)
+  const getSpecialLayout = (count: number): { row: number; colsInRow: number }[] | null => {
+    if (count === 5) {
+      // 3 on top row, 2 on bottom row (centered)
+      return [
+        { row: 0, colsInRow: 3 },
+        { row: 0, colsInRow: 3 },
+        { row: 0, colsInRow: 3 },
+        { row: 1, colsInRow: 2 },
+        { row: 1, colsInRow: 2 },
+      ];
+    }
+    if (count === 7) {
+      // 4 on top row, 3 on bottom row (centered)
+      return [
+        { row: 0, colsInRow: 4 },
+        { row: 0, colsInRow: 4 },
+        { row: 0, colsInRow: 4 },
+        { row: 0, colsInRow: 4 },
+        { row: 1, colsInRow: 3 },
+        { row: 1, colsInRow: 3 },
+        { row: 1, colsInRow: 3 },
+      ];
+    }
+    return null;
+  };
+
+  // Canvas size configurations matching campaign-editor
+  const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
+    a4portrait: { width: 794, height: 1123 },
+    a4landscape: { width: 1123, height: 794 },
+    a5portrait: { width: 559, height: 794 },
+    a5landscape: { width: 794, height: 559 },
+    letterportrait: { width: 816, height: 1056 },
+    letterlandscape: { width: 1056, height: 816 },
+    instagrampost: { width: 1080, height: 1080 },
+    instagramstory: { width: 1080, height: 1920 },
+    facebookpost: { width: 1200, height: 630 },
+  };
+
+  // Get selected template's header/footer heights and canvas dimensions
+  const getTemplateConfig = () => {
+    const selectedTemplate = templates?.find(t => t.id === selectedTemplateId);
+    const config = selectedTemplate?.coverPageConfig as any;
+    const canvasSizeKey = config?.canvasSize || 'a4portrait';
+    const canvasDimensions = CANVAS_SIZES[canvasSizeKey] || { width: 794, height: 1123 };
+    
+    return {
+      headerHeight: config?.headerHeight ?? DEFAULT_HEADER_HEIGHT,
+      footerHeight: config?.footerHeight ?? DEFAULT_FOOTER_HEIGHT,
+      canvasWidth: canvasDimensions.width,
+      canvasHeight: canvasDimensions.height,
+      canvasSize: canvasSizeKey,
+    };
+  };
+
+  // Calculate optimal product size based on grid and available area
+  const calculateOptimalProductSize = (
+    productsPerPage: number,
+    contentWidth: number,
+    contentHeight: number
+  ): { width: number; height: number } => {
+    const margin = 30; // Margin from edges
+    const gap = 20; // Gap between products
+    const grid = getGridConfig(productsPerPage);
+    
+    const availableWidth = contentWidth - margin * 2;
+    const availableHeight = contentHeight - margin * 2;
+    
+    // Calculate max size that fits in grid cells
+    const maxCellWidth = (availableWidth - gap * (grid.cols - 1)) / grid.cols;
+    const maxCellHeight = (availableHeight - gap * (grid.rows - 1)) / grid.rows;
+    
+    // Use 4:5 aspect ratio (width:height)
+    const aspectRatio = 4 / 5;
+    
+    // Calculate size that fits within cell while maintaining aspect ratio
+    let productWidth: number;
+    let productHeight: number;
+    
+    if (maxCellWidth / maxCellHeight < aspectRatio) {
+      // Width constrained
+      productWidth = maxCellWidth * 0.9; // Use 90% of cell for visual breathing room
+      productHeight = productWidth / aspectRatio;
+    } else {
+      // Height constrained
+      productHeight = maxCellHeight * 0.9;
+      productWidth = productHeight * aspectRatio;
+    }
+    
+    // Ensure minimum readable size
+    const minWidth = 120;
+    const minHeight = 150;
+    productWidth = Math.max(minWidth, productWidth);
+    productHeight = Math.max(minHeight, productHeight);
+    
+    return { width: Math.round(productWidth), height: Math.round(productHeight) };
+  };
+
+  // Calculate all product positions for all pages with proper centering
+  const calculateAllProductPositions = (
+    totalProducts: number,
+    perPage: number
+  ): { x: number; y: number; width: number; height: number; page: number }[] => {
+    const templateConfig = getTemplateConfig();
+    const contentTop = templateConfig.headerHeight;
+    const contentBottom = templateConfig.canvasHeight - templateConfig.footerHeight;
+    const contentHeight = contentBottom - contentTop;
+    const contentWidth = templateConfig.canvasWidth;
+    const margin = 30;
+    const gap = 20;
+    
+    const positions: { x: number; y: number; width: number; height: number; page: number }[] = [];
+    const totalPages = Math.ceil(totalProducts / perPage);
+    
+    for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+      const startIdx = pageIdx * perPage;
+      const endIdx = Math.min(startIdx + perPage, totalProducts);
+      const productsOnThisPage = endIdx - startIdx;
+      
+      if (productsOnThisPage === 0) continue;
+      
+      const productSize = calculateOptimalProductSize(productsOnThisPage, contentWidth, contentHeight);
+      const grid = getGridConfig(productsOnThisPage);
+      const specialLayout = getSpecialLayout(productsOnThisPage);
+      
+      // Available content area
+      const availableWidth = contentWidth - margin * 2;
+      const availableHeight = contentHeight - margin * 2;
+      
+      // Calculate row height for vertical centering
+      const totalRowHeight = grid.rows * productSize.height + (grid.rows - 1) * gap;
+      const startY = contentTop + margin + (availableHeight - totalRowHeight) / 2;
+      
+      let productIndex = 0;
+      for (let row = 0; row < grid.rows && productIndex < productsOnThisPage; row++) {
+        // Determine how many products in this row
+        let colsInThisRow: number;
+        if (specialLayout) {
+          // Count products in this row from special layout
+          colsInThisRow = specialLayout.filter((item, idx) => idx < productsOnThisPage && item.row === row).length;
+        } else {
+          // Standard grid
+          colsInThisRow = Math.min(grid.cols, productsOnThisPage - productIndex);
+        }
+        
+        // Calculate total width of products in this row for centering
+        const rowWidth = colsInThisRow * productSize.width + (colsInThisRow - 1) * gap;
+        const startX = margin + (availableWidth - rowWidth) / 2;
+        
+        for (let col = 0; col < colsInThisRow && productIndex < productsOnThisPage; col++) {
+          const x = startX + col * (productSize.width + gap);
+          const y = startY + row * (productSize.height + gap);
+          
+          positions.push({
+            x: Math.round(x),
+            y: Math.round(y),
+            width: productSize.width,
+            height: productSize.height,
+            page: pageIdx + 1,
+          });
+          productIndex++;
+        }
+      }
+    }
+    
+    return positions;
+  };
 
   // Debounce connector search
   useEffect(() => {
@@ -143,32 +334,120 @@ export default function CampaignWizardPage() {
     },
     onSuccess: async (campaign) => {
       if (selectedProducts.length > 0) {
+        // Calculate positions for all products across all pages
+        const allPositions = calculateAllProductPositions(selectedProducts.length, productsPerPage);
+        
         await apiRequest("PUT", `/api/campaigns/${campaign.id}/products`, {
-          products: selectedProducts.map((sp, index) => ({
-            productId: sp.productId,
-            campaignPrice: sp.campaignPrice || null,
-            campaignDiscountPrice: sp.campaignDiscountPrice || null,
-            priceTagTemplateId: sp.priceTagTemplateId || null,
-            pageNumber: 1,
-            positionX: 50 + (index % 3) * 150,
-            positionY: 50 + Math.floor(index / 3) * 180,
-            width: 120,
-            height: 140,
-            isExternal: sp.isExternal || false,
-            externalProductData: sp.isExternal ? {
-              name: sp.product.name,
-              description: sp.product.description,
-              barcode: (sp.product as any).barcode || null,
-              sku: sp.product.sku,
-              category: sp.product.category,
-              price: sp.product.price,
-              discountPrice: sp.product.discountPrice,
-              currency: (sp.product as any).currency || "TRY",
-              imageUrl: sp.product.imageUrl,
-              unit: (sp.product as any).unit || null,
-            } : undefined,
-          })),
+          products: selectedProducts.map((sp, index) => {
+            const pos = allPositions[index] || {
+              x: 50 + (index % 3) * 150,
+              y: 100 + Math.floor(index / 3) * 180,
+              width: 120,
+              height: 160,
+              page: Math.floor(index / productsPerPage) + 1,
+            };
+            return {
+              productId: sp.productId,
+              campaignPrice: sp.campaignPrice || null,
+              campaignDiscountPrice: sp.campaignDiscountPrice || null,
+              priceTagTemplateId: sp.priceTagTemplateId || null,
+              pageNumber: pos.page,
+              positionX: Math.round(pos.x),
+              positionY: Math.round(pos.y),
+              width: pos.width,
+              height: pos.height,
+              isExternal: sp.isExternal || false,
+              externalProductData: sp.isExternal ? {
+                name: sp.product.name,
+                description: sp.product.description,
+                barcode: (sp.product as any).barcode || null,
+                sku: sp.product.sku,
+                category: sp.product.category,
+                price: sp.product.price,
+                discountPrice: sp.product.discountPrice,
+                currency: (sp.product as any).currency || "TRY",
+                imageUrl: sp.product.imageUrl,
+                unit: (sp.product as any).unit || null,
+              } : undefined,
+            };
+          }),
         });
+        
+        // Remove backgrounds from product images and create canvas elements
+        const token = localStorage.getItem("authToken");
+        const canvasElements = [];
+        
+        for (let index = 0; index < selectedProducts.length; index++) {
+          const sp = selectedProducts[index];
+          const pos = allPositions[index] || {
+            x: 50 + (index % 3) * 150,
+            y: 100 + Math.floor(index / 3) * 180,
+            width: 200,
+            height: 240,
+            page: Math.floor(index / productsPerPage) + 1,
+          };
+          
+          let finalImageUrl = sp.product.imageUrl;
+          
+          // Try to remove background from the product image
+          if (sp.product.imageUrl) {
+            try {
+              const bgRes = await fetch("/api/image-processing/remove-background", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ imageUrl: sp.product.imageUrl }),
+              });
+              
+              if (bgRes.ok) {
+                const bgData = await bgRes.json();
+                if (bgData.url) {
+                  finalImageUrl = bgData.url;
+                }
+              }
+            } catch (err) {
+              console.error("Background removal failed for product:", sp.product.name, err);
+            }
+          }
+          
+          // Create canvas element for this product
+          canvasElements.push({
+            id: `campaign-product-${sp.productId}-${Date.now()}-${index}`,
+            type: "product",
+            x: pos.x,
+            y: pos.y,
+            width: pos.width,
+            height: pos.height,
+            rotation: 0,
+            opacity: 100,
+            page: pos.page,
+            data: {
+              productId: sp.productId,
+              product: {
+                ...sp.product,
+                imageUrl: finalImageUrl,
+              },
+              campaignPrice: sp.campaignPrice || sp.product.price?.toString() || "",
+              campaignDiscountPrice: sp.campaignDiscountPrice || null,
+            },
+          });
+        }
+        
+        // Update campaign with canvas elements
+        if (canvasElements.length > 0) {
+          const existingCampaign = await apiRequest("GET", `/api/campaigns/${campaign.id}`) as any;
+          const existingCanvasData = existingCampaign?.canvasData || {};
+          
+          await apiRequest("PATCH", `/api/campaigns/${campaign.id}`, {
+            canvasData: {
+              ...existingCanvasData,
+              elements: canvasElements,
+              totalPages: Math.ceil(selectedProducts.length / productsPerPage),
+            },
+          });
+        }
       }
       
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
@@ -400,9 +679,9 @@ export default function CampaignWizardPage() {
       </div>
       
       {loadingTemplates ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-48 rounded-lg" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-[3/4] rounded-lg" />
           ))}
         </div>
       ) : filteredTemplates?.length === 0 ? (
@@ -411,32 +690,37 @@ export default function CampaignWizardPage() {
           <p>{t("templates.noTemplates")}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {filteredTemplates?.map((template) => (
             <Card
               key={template.id}
-              className={`cursor-pointer transition-all hover-elevate ${
+              className={`cursor-pointer transition-all hover-elevate overflow-hidden ${
                 selectedTemplateId === template.id ? "ring-2 ring-primary" : ""
               }`}
               onClick={() => setSelectedTemplateId(template.id)}
               data-testid={`card-template-${template.id}`}
             >
-              <CardHeader className="p-0">
-                <div className="h-32 bg-muted flex items-center justify-center rounded-t-lg">
-                  {template.thumbnailUrl ? (
-                    <img
-                      src={template.thumbnailUrl}
-                      alt={template.title}
-                      className="w-full h-full object-cover rounded-t-lg"
-                    />
-                  ) : (
-                    <Files className="w-8 h-8 text-muted-foreground" />
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="p-4">
-                <h3 className="font-medium truncate">{template.title}</h3>
-                <Badge variant="secondary" className="mt-2">
+              <div 
+                className="aspect-[3/4] bg-muted flex items-center justify-center"
+                style={{
+                  backgroundColor: template.backgroundColor || "#f3f4f6",
+                  backgroundImage: template.backgroundImageUrl 
+                    ? `url(${template.backgroundImageUrl})` 
+                    : template.coverPageImageUrl 
+                      ? `url(${template.coverPageImageUrl})` 
+                      : 'none',
+                  backgroundSize: 'contain',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                }}
+              >
+                {!template.backgroundImageUrl && !template.coverPageImageUrl && (
+                  <Files className="w-8 h-8 text-muted-foreground" />
+                )}
+              </div>
+              <CardContent className="p-2">
+                <h3 className="text-sm font-medium truncate">{template.title}</h3>
+                <Badge variant="secondary" className="mt-1 text-xs">
                   {template.type === "single_page" ? t("templates.singlePage") : t("templates.multiPage")}
                 </Badge>
               </CardContent>
@@ -690,7 +974,7 @@ export default function CampaignWizardPage() {
             {t("wizard.selectedProducts")} ({selectedProducts.length})
           </h3>
           
-          <ScrollArea className="h-[400px] border rounded-lg p-4">
+          <ScrollArea className="h-[350px] border rounded-lg p-4">
             {selectedProducts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="w-8 h-8 mx-auto mb-2" />
@@ -762,6 +1046,31 @@ export default function CampaignWizardPage() {
               </div>
             )}
           </ScrollArea>
+          
+          {/* Products per page selector */}
+          <div className="mt-4 p-4 border rounded-lg bg-muted/30">
+            <Label className="text-sm font-medium">{t("wizard.productsPerPage")}</Label>
+            <p className="text-xs text-muted-foreground mb-3">{t("wizard.productsPerPageDescription")}</p>
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((num) => (
+                <Button
+                  key={num}
+                  variant={productsPerPage === num ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setProductsPerPage(num)}
+                  className="w-full"
+                  data-testid={`button-products-per-page-${num}`}
+                >
+                  {num}
+                </Button>
+              ))}
+            </div>
+            {selectedProducts.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {t("wizard.pagesRequired")}: {Math.ceil(selectedProducts.length / productsPerPage)}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

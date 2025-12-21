@@ -9,7 +9,9 @@ import {
   Plus, 
   Clock, 
   CheckCircle, 
-  CheckCheck 
+  CheckCheck,
+  MessageSquare,
+  XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,10 +64,7 @@ export default function SuggestionsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: SuggestionFormValues) => {
-      return apiRequest("/api/suggestions", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/suggestions", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/suggestions"] });
@@ -93,21 +92,25 @@ export default function SuggestionsPage() {
         return <CheckCircle className="h-4 w-4" />;
       case "implemented":
         return <CheckCheck className="h-4 w-4" />;
+      case "rejected":
+        return <XCircle className="h-4 w-4" />;
       default:
         return <Clock className="h-4 w-4" />;
     }
   };
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "pending":
-        return "secondary";
+        return "bg-yellow-500 text-white dark:bg-yellow-600";
       case "reviewed":
-        return "default";
+        return "bg-blue-500 text-white dark:bg-blue-600";
       case "implemented":
-        return "outline";
+        return "bg-green-500 text-white dark:bg-green-600";
+      case "rejected":
+        return "bg-red-500 text-white dark:bg-red-600";
       default:
-        return "secondary";
+        return "bg-yellow-500 text-white dark:bg-yellow-600";
     }
   };
 
@@ -174,7 +177,7 @@ export default function SuggestionsPage() {
                         {formatDate(suggestion.createdAt)}
                       </CardDescription>
                     </div>
-                    <Badge variant={getStatusBadgeVariant(suggestion.status || "pending")}>
+                    <Badge className={getStatusBadgeClass(suggestion.status || "pending")}>
                       <span className="flex items-center gap-1">
                         {getStatusIcon(suggestion.status || "pending")}
                         {t(`suggestions.${suggestion.status || "pending"}`)}
@@ -182,10 +185,21 @@ export default function SuggestionsPage() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground line-clamp-3" data-testid={`text-suggestion-content-${suggestion.id}`}>
                     {suggestion.content}
                   </p>
+                  {suggestion.adminComment && (
+                    <div className="p-3 rounded-md bg-muted">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{t("adminSuggestions.commentHistory")}</span>
+                      </div>
+                      <pre className="text-sm text-muted-foreground whitespace-pre-wrap font-sans" data-testid={`text-admin-comment-${suggestion.id}`}>
+                        {suggestion.adminComment}
+                      </pre>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

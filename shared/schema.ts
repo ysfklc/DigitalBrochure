@@ -84,6 +84,8 @@ export const templates = pgTable("templates", {
   title: text("title").notNull(),
   type: templateTypeEnum("type").notNull(),
   labelTemplateId: varchar("label_template_id").references(() => priceTagTemplates.id),
+  // Label/badge image for single-page templates
+  labelImageUrl: text("label_image_url"),
   // Single-page template background image
   backgroundImageUrl: text("background_image_url"),
   // Multi-page template images
@@ -168,6 +170,7 @@ export const suggestions = pgTable("suggestions", {
   title: text("title").notNull(),
   content: text("content").notNull(),
   status: text("status").default("pending"),
+  adminComment: text("admin_comment"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

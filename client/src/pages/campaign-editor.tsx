@@ -375,6 +375,30 @@ export default function CampaignEditorPage() {
     })),
   ];
 
+  // Get the selected template based on campaign's templateId
+  const selectedTemplate = templates?.find(t => t.id === campaign?.templateId);
+
+  // Calculate the background image URL based on template type and current page
+  const getTemplateBackgroundImage = (): string | null => {
+    if (!selectedTemplate) return null;
+
+    if (selectedTemplate.type === 'single_page') {
+      return selectedTemplate.backgroundImageUrl || null;
+    } else if (selectedTemplate.type === 'multi_page') {
+      // For multi-page: page 1 = cover, last page = final, middle pages = middle
+      if (currentPage === 1) {
+        return selectedTemplate.coverPageImageUrl || null;
+      } else if (currentPage === totalPages) {
+        return selectedTemplate.finalPageImageUrl || null;
+      } else {
+        return selectedTemplate.middlePageImageUrl || null;
+      }
+    }
+    return null;
+  };
+
+  const templateBackgroundImage = getTemplateBackgroundImage();
+
   const initialDataLoadedRef = useRef(false);
   
   useEffect(() => {
@@ -388,22 +412,30 @@ export default function CampaignEditorPage() {
         return; // Wait for products to load
       }
       
+      // Wait for templates to load so we can apply template settings
+      if (campaign.templateId && !templates) {
+        return; // Wait for templates to load
+      }
+      
       initialDataLoadedRef.current = true;
+      
+      // Get template settings from the linked template's coverPageConfig
+      const linkedTemplate = templates?.find(t => t.id === campaign.templateId);
+      const templateConfig = linkedTemplate?.coverPageConfig as any;
       
       if (campaign.canvasData) {
         const data = campaign.canvasData as any;
         let elements = data.elements || [];
         
-        // Merge campaign products as canvas elements if they're not already in the canvas
-        if (campaignProducts && campaignProducts.length > 0) {
-          const existingProductIds = new Set(
-            elements.filter((el: any) => el.type === 'product').map((el: any) => el.data?.productId)
-          );
-          
+        // Check if canvas already has product elements - if so, trust canvas as source of truth
+        // and don't merge from campaignProducts (avoids duplicate products with different IDs)
+        const existingProductElements = elements.filter((el: any) => el.type === 'product');
+        
+        // Only merge campaignProducts if canvas has NO product elements
+        if (existingProductElements.length === 0 && campaignProducts && campaignProducts.length > 0) {
           const productElements = campaignProducts
-            .filter((cp: any) => !existingProductIds.has(cp.productId))
             .map((cp: any, index: number) => ({
-              id: `campaign-product-${cp.id}`, // Use stable ID based on campaign product ID
+              id: `campaign-product-${cp.id}`,
               type: 'product' as const,
               x: cp.positionX || (50 + (index % 3) * 150),
               y: cp.positionY || (50 + Math.floor(index / 3) * 180),
@@ -424,35 +456,64 @@ export default function CampaignEditorPage() {
         }
         
         setCanvasElements(elements);
-        if (data.canvasSize) setCanvasSize(data.canvasSize);
+        // First try campaign canvasData, then fall back to template settings
+        if (data.canvasSize) {
+          setCanvasSize(data.canvasSize);
+        } else if (templateConfig?.canvasSize) {
+          setCanvasSize(templateConfig.canvasSize);
+        }
         if (data.totalPages) setTotalPages(data.totalPages);
-        if (data.headerHeight !== undefined) setHeaderHeight(data.headerHeight);
-        if (data.footerHeight !== undefined) setFooterHeight(data.footerHeight);
+        if (data.headerHeight !== undefined) {
+          setHeaderHeight(data.headerHeight);
+        } else if (templateConfig?.headerHeight !== undefined) {
+          setHeaderHeight(templateConfig.headerHeight);
+        }
+        if (data.footerHeight !== undefined) {
+          setFooterHeight(data.footerHeight);
+        } else if (templateConfig?.footerHeight !== undefined) {
+          setFooterHeight(templateConfig.footerHeight);
+        }
         if (data.showHeaderZone !== undefined) setShowHeaderZone(data.showHeaderZone);
         if (data.showFooterZone !== undefined) setShowFooterZone(data.showFooterZone);
-      } else if (campaignProducts && campaignProducts.length > 0) {
-        // No canvas data but we have products - create product elements
-        const productElements = campaignProducts.map((cp: any, index: number) => ({
-          id: `campaign-product-${cp.id}`, // Use stable ID based on campaign product ID
-          type: 'product' as const,
-          x: cp.positionX || (50 + (index % 3) * 150),
-          y: cp.positionY || (50 + Math.floor(index / 3) * 180),
-          width: cp.width || 120,
-          height: cp.height || 140,
-          rotation: 0,
-          opacity: 100,
-          page: cp.pageNumber || 1,
-          data: {
-            productId: cp.productId,
-            product: cp.product,
-            campaignPrice: cp.campaignPrice,
-            campaignDiscountPrice: cp.campaignDiscountPrice,
-          },
-        }));
-        setCanvasElements(productElements);
+      } else {
+        // No canvas data - apply template settings if available
+        if (templateConfig) {
+          if (templateConfig.canvasSize) setCanvasSize(templateConfig.canvasSize);
+          if (templateConfig.headerHeight !== undefined) setHeaderHeight(templateConfig.headerHeight);
+          if (templateConfig.footerHeight !== undefined) setFooterHeight(templateConfig.footerHeight);
+          if (templateConfig.showHeaderZone !== undefined) setShowHeaderZone(templateConfig.showHeaderZone);
+          if (templateConfig.showFooterZone !== undefined) setShowFooterZone(templateConfig.showFooterZone);
+        }
+        
+        if (campaignProducts && campaignProducts.length > 0) {
+          // Create product elements from campaign products
+          const productElements = campaignProducts.map((cp: any, index: number) => ({
+            id: `campaign-product-${cp.id}`, // Use stable ID based on campaign product ID
+            type: 'product' as const,
+            x: cp.positionX || (50 + (index % 3) * 150),
+            y: cp.positionY || (50 + Math.floor(index / 3) * 180),
+            width: cp.width || 120,
+            height: cp.height || 140,
+            rotation: 0,
+            opacity: 100,
+            page: cp.pageNumber || 1,
+            data: {
+              productId: cp.productId,
+              product: cp.product,
+              campaignPrice: cp.campaignPrice,
+              campaignDiscountPrice: cp.campaignDiscountPrice,
+            },
+          }));
+          setCanvasElements(productElements);
+        }
+      }
+      
+      // Set total pages based on campaign type for multi-page campaigns
+      if (campaign.type === 'multi_page' && totalPages < 3) {
+        setTotalPages(3);
       }
     }
-  }, [campaign, campaignProducts, id]);
+  }, [campaign, campaignProducts, id, templates]);
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -584,32 +645,147 @@ export default function CampaignEditorPage() {
     e.dataTransfer.effectAllowed = "copy";
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  // Get grid configuration for products per page
+  const getGridConfig = (count: number): { cols: number; rows: number } => {
+    switch (count) {
+      case 1: return { cols: 1, rows: 1 };
+      case 2: return { cols: 2, rows: 1 };
+      case 3: return { cols: 3, rows: 1 };
+      case 4: return { cols: 2, rows: 2 };
+      case 5: return { cols: 3, rows: 2 };
+      case 6: return { cols: 3, rows: 2 };
+      case 7: return { cols: 4, rows: 2 };
+      case 8: return { cols: 4, rows: 2 };
+      default: return { cols: 2, rows: 2 };
+    }
+  };
+
+  // Calculate optimal product size based on grid layout and available area
+  const calculateProductSize = (productsPerPage: number) => {
+    const canvasWidth = CANVAS_SIZES[canvasSize].width;
+    const canvasHeight = CANVAS_SIZES[canvasSize].height;
+    const contentTop = showHeaderZone ? headerHeight : 0;
+    const contentBottom = canvasHeight - (showFooterZone ? footerHeight : 0);
+    const contentHeight = contentBottom - contentTop;
+    const contentWidth = canvasWidth;
+    const margin = 30;
+    const gap = 20;
+    
+    const grid = getGridConfig(productsPerPage);
+    const availableWidth = contentWidth - margin * 2;
+    const availableHeight = contentHeight - margin * 2;
+    
+    // Calculate max size that fits in grid cells
+    const maxCellWidth = (availableWidth - gap * (grid.cols - 1)) / grid.cols;
+    const maxCellHeight = (availableHeight - gap * (grid.rows - 1)) / grid.rows;
+    
+    // Use 4:5 aspect ratio (width:height)
+    const aspectRatio = 4 / 5;
+    
+    let productWidth: number;
+    let productHeight: number;
+    
+    if (maxCellWidth / maxCellHeight < aspectRatio) {
+      productWidth = maxCellWidth * 0.9;
+      productHeight = productWidth / aspectRatio;
+    } else {
+      productHeight = maxCellHeight * 0.9;
+      productWidth = productHeight * aspectRatio;
+    }
+    
+    // Ensure minimum readable size
+    const minWidth = 120;
+    const minHeight = 150;
+    productWidth = Math.max(minWidth, productWidth);
+    productHeight = Math.max(minHeight, productHeight);
+    
+    return { width: Math.round(productWidth), height: Math.round(productHeight) };
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const productData = e.dataTransfer.getData("product");
     if (productData && canvasRef.current) {
       const product = JSON.parse(productData);
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / (zoom / 100);
-      const y = (e.clientY - rect.top) / (zoom / 100);
+      const dropX = (e.clientX - rect.left) / (zoom / 100);
+      const dropY = (e.clientY - rect.top) / (zoom / 100);
       
+      // Calculate content area between header and footer zones
+      const contentTop = showHeaderZone ? headerHeight : 0;
+      const contentBottom = CANVAS_SIZES[canvasSize].height - (showFooterZone ? footerHeight : 0);
+      
+      // Use a balanced default size for dropped products (sized for ~4 products per page)
+      // This provides a reasonable starting size that users can adjust
+      const defaultProductsPerPage = 4;
+      const productSize = calculateProductSize(defaultProductsPerPage);
+      const productWidth = productSize.width;
+      const productHeight = productSize.height;
+      
+      // Constrain product placement between header and footer
+      const x = Math.max(0, Math.min(dropX - productWidth / 2, CANVAS_SIZES[canvasSize].width - productWidth));
+      const y = Math.max(contentTop, Math.min(dropY - productHeight / 2, contentBottom - productHeight));
+      
+      const elementId = `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Show processing state before adding
+      setProcessingElementId(elementId);
+      
+      // Try to remove background first, then add to canvas
+      let finalImageUrl = product.imageUrl;
+      const imageUrl = product.imageUrl;
+      
+      if (imageUrl) {
+        try {
+          const token = localStorage.getItem("authToken");
+          const res = await fetch("/api/image-processing/remove-background", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ imageUrl }),
+          });
+          
+          if (res.ok) {
+            const responseData = await res.json();
+            if (responseData.url) {
+              finalImageUrl = responseData.url;
+            }
+          }
+        } catch (error) {
+          console.error("Auto background removal failed:", error);
+        }
+      }
+      
+      // Now add the element with the background-removed image
+      // Use consistent data schema: productId at root, product object with details
       const newElement: CanvasElement = {
-        id: `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: elementId,
         type: 'product',
-        x: Math.max(0, x - 60),
-        y: Math.max(0, y - 60),
-        width: 120,
-        height: 140,
+        x,
+        y,
+        width: productWidth,
+        height: productHeight,
         rotation: 0,
         opacity: 100,
-        data: product,
+        data: {
+          productId: product.id,
+          product: {
+            ...product,
+            imageUrl: finalImageUrl,
+          },
+          campaignPrice: product.price?.toString() || '',
+          campaignDiscountPrice: product.discountPrice?.toString() || null,
+        },
         page: currentPage,
       };
       
       setCanvasElements((prev) => [...prev, newElement]);
       setSelectedElement(newElement.id);
       setActiveTool('select');
+      setProcessingElementId(null);
       
       toast({
         title: t("common.success"),
@@ -939,67 +1115,81 @@ export default function CampaignEditorPage() {
       const name = productData.name;
       const price = element.data.campaignPrice || productData.price;
       const discountPrice = element.data.campaignDiscountPrice || productData.discountPrice;
+      const unit = productData.unit || 'each';
       const isProcessing = processingElementId === element.id;
       
+      // Get price styling from template
+      const priceConfig = selectedTemplate?.discountedPriceConfig as any || {};
+      const labelTextConfig = selectedTemplate?.labelTextConfig as any || {};
+      const unitConfig = selectedTemplate?.unitOfMeasureConfig as any || {};
+      const labelImageUrl = selectedTemplate?.labelImageUrl;
+      
+      // Calculate price label dimensions - 1/6 of product size, positioned at bottom-right
+      const labelWidth = Math.max(element.width / 6, 50);
+      const labelHeight = Math.max(element.height / 6, 40);
+      
       return (
-        <div className="w-full h-full bg-card border rounded-md overflow-hidden flex flex-col relative group">
-          {!inPreview && imageUrl && (
-            <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="h-6 w-6"
-                    disabled={isProcessing}
-                    data-testid={`button-image-actions-${element.id}`}
-                  >
-                    {isProcessing ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <MoreVertical className="h-3 w-3" />
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuLabel>{t('editor.imageActions')}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveBackground(element.id, imageUrl);
-                    }}
-                    disabled={isProcessing}
-                    data-testid={`button-remove-bg-${element.id}`}
-                  >
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    {t('editor.removeBackground')}
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger disabled={isProcessing}>
-                      <Palette className="h-4 w-4 mr-2" />
-                      {t('editor.applyPreset')}
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {IMAGE_PRESETS.map((preset) => (
-                        <DropdownMenuItem
-                          key={preset.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleApplyPreset(element.id, imageUrl, preset.id);
-                          }}
-                          data-testid={`button-preset-${preset.id}-${element.id}`}
-                        >
-                          {preset.label}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-          <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden relative">
+        <div className="w-full h-full relative group">
+          {/* Product Image Area - Full size, no background */}
+          <div 
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            {!inPreview && imageUrl && (
+              <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className="h-6 w-6"
+                      disabled={isProcessing}
+                      data-testid={`button-image-actions-${element.id}`}
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <MoreVertical className="h-3 w-3" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel>{t('editor.imageActions')}</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveBackground(element.id, imageUrl);
+                      }}
+                      disabled={isProcessing}
+                      data-testid={`button-remove-bg-${element.id}`}
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      {t('editor.removeBackground')}
+                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger disabled={isProcessing}>
+                        <Palette className="h-4 w-4 mr-2" />
+                        {t('editor.applyPreset')}
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {IMAGE_PRESETS.map((preset) => (
+                          <DropdownMenuItem
+                            key={preset.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApplyPreset(element.id, imageUrl, preset.id);
+                            }}
+                            data-testid={`button-preset-${preset.id}-${element.id}`}
+                          >
+                            {preset.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
             {isProcessing && (
               <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1009,19 +1199,69 @@ export default function CampaignEditorPage() {
               <img
                 src={imageUrl}
                 alt={name}
-                className="w-full h-full object-cover"
+                className="max-w-full max-h-full object-contain"
                 draggable={false}
               />
             ) : (
               <Package className="h-8 w-8 text-muted-foreground" />
             )}
           </div>
-          <div className="p-1 text-center bg-background">
-            <p className="text-xs font-medium truncate">{name}</p>
-            <p className="text-xs text-primary font-bold">
-              ${discountPrice || price}
-            </p>
-          </div>
+          
+          {/* Price Label - Positioned at bottom-right corner */}
+          {(price || discountPrice) && (
+            <div 
+              className="absolute flex items-center justify-center rounded-sm overflow-hidden"
+              style={{ 
+                right: 0,
+                bottom: 0,
+                width: `${labelWidth}px`,
+                height: `${labelHeight}px`,
+                backgroundImage: labelImageUrl ? `url(${labelImageUrl})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundColor: labelImageUrl ? 'transparent' : 'hsl(var(--primary))',
+              }}
+            >
+              <div className="text-center px-1">
+                {/* Original price with strikethrough */}
+                {discountPrice && price && (
+                  <p 
+                    className="text-xs line-through opacity-70"
+                    style={{
+                      fontFamily: labelTextConfig.fontFamily || 'Inter',
+                      fontSize: `${Math.max((labelTextConfig.fontSize || 10) * scale * 0.8, 8)}px`,
+                      color: labelTextConfig.color || '#ffffff',
+                    }}
+                  >
+                    ${price}
+                  </p>
+                )}
+                {/* Discounted/Current price */}
+                <p 
+                  className="font-bold leading-tight"
+                  style={{
+                    fontFamily: priceConfig.fontFamily || 'Inter',
+                    fontSize: `${Math.max((priceConfig.fontSize || 14) * scale, 10)}px`,
+                    fontWeight: priceConfig.fontWeight || 'bold',
+                    color: priceConfig.color || '#ffffff',
+                  }}
+                >
+                  ${discountPrice || price}
+                </p>
+                {/* Unit */}
+                <p 
+                  className="text-xs opacity-80"
+                  style={{
+                    fontFamily: unitConfig.fontFamily || 'Inter',
+                    fontSize: `${Math.max((unitConfig.fontSize || 8) * scale * 0.8, 6)}px`,
+                    color: unitConfig.color || '#ffffff',
+                  }}
+                >
+                  /{unit}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1619,6 +1859,11 @@ export default function CampaignEditorPage() {
             style={{
               width: `${scaledCanvasWidth}px`,
               height: `${scaledCanvasHeight}px`,
+              backgroundColor: selectedTemplate?.backgroundColor || '#ffffff',
+              backgroundImage: templateBackgroundImage ? `url(${templateBackgroundImage})` : 'none',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
             }}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
@@ -2068,10 +2313,15 @@ export default function CampaignEditorPage() {
           </DialogHeader>
           <div className="flex justify-center py-4">
             <div
-              className="bg-white shadow-lg rounded-lg relative"
+              className="shadow-lg rounded-lg relative overflow-hidden"
               style={{
                 width: `${CANVAS_SIZES[canvasSize].width * 0.4}px`,
                 height: `${CANVAS_SIZES[canvasSize].height * 0.4}px`,
+                backgroundColor: selectedTemplate?.backgroundColor || '#ffffff',
+                backgroundImage: templateBackgroundImage ? `url(${templateBackgroundImage})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
               }}
             >
               {showHeaderZone && (

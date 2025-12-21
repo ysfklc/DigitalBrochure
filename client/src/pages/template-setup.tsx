@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
-import { Plus, Upload, ChevronRight } from "lucide-react";
+import { Plus, Upload, ChevronRight, Bold, Italic, Underline, Strikethrough } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,39 +10,181 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PriceTagTemplate } from "@shared/schema";
 
 const AVAILABLE_FONTS = [
-  "Inter",
-  "Roboto",
-  "Roboto Mono",
-  "Open Sans",
-  "Lato",
-  "Oswald",
-  "Playfair Display",
-  "Merriweather",
-  "Ubuntu",
-  "Inconsolata",
-  "Droid Sans",
-  "Droid Serif",
-  "Monaco",
-  "Courier New",
-  "Georgia",
-  "Verdana",
-  "Times New Roman",
+  "Algerian",
   "Arial",
-  "Helvetica",
+  "Arial Black",
+  "Arial Unicode MS",
+  "Baskerville Old Face",
+  "Bauhaus 93",
+  "Batang",
+  "Bell MT",
+  "Berlin Sans FB",
+  "Bernard MT Condensed",
+  "Bodoni MT",
+  "Book Antiqua",
+  "Bookman Old Style",
+  "Bradley Hand ITC",
+  "Broadway",
+  "Brush Script MT",
+  "Calibri",
+  "Californian FB",
+  "Cambria",
+  "Candara",
+  "Castellar",
+  "Century",
+  "Century Gothic",
+  "Century Schoolbook",
+  "Chiller",
+  "Colonna MT",
   "Comic Sans MS",
+  "Consolas",
+  "Constantia",
+  "Cooper Black",
+  "Corbel",
+  "Courier New",
+  "Curlz MT",
+  "Dancing Script",
+  "Edwardian Script ITC",
+  "Elephant",
+  "Engravers MT",
+  "Eras Bold ITC",
+  "Eras Demi ITC",
+  "Eras Light ITC",
+  "Eras Medium ITC",
+  "Felix Titling",
+  "Fira Code",
+  "Footlight MT Light",
+  "Forte",
+  "Franklin Gothic Medium",
+  "Freestyle Script",
+  "French Script MT",
+  "Garamond",
+  "Georgia",
+  "Gill Sans MT",
+  "Goudy Old Style",
+  "Great Vibes",
+  "Gulim",
+  "Haettenschweiler",
+  "Harlow Solid Italic",
+  "Harrington",
+  "High Tower Text",
+  "Impact",
+  "Imprint MT Shadow",
+  "Inconsolata",
+  "Informal Roman",
+  "Inter",
+  "JetBrains Mono",
+  "Jokerman",
+  "Juice ITC",
+  "Kristen ITC",
+  "Lato",
+  "Libre Baskerville",
+  "Lobster",
+  "Lucida Bright",
+  "Lucida Calligraphy",
+  "Lucida Console",
+  "Lucida Fax",
+  "Lucida Handwriting",
+  "Lucida Sans",
+  "Lucida Sans Typewriter",
+  "Lucida Sans Unicode",
+  "Magneto",
+  "Maiandra GD",
+  "Marlett",
+  "Matura MT Script Capitals",
+  "Merriweather",
+  "Microsoft Sans Serif",
+  "Mistral",
+  "Modern No. 20",
+  "Montserrat",
+  "Monotype Corsiva",
+  "MS Gothic",
+  "MS Mincho",
+  "MS Sans Serif",
+  "MS Serif",
+  "Niagara Engraved",
+  "Niagara Solid",
+  "Nunito",
+  "Old English Text MT",
+  "Onyx",
+  "Open Sans",
+  "Pacifico",
+  "Palace Script MT",
+  "Palatino Linotype",
+  "Papyrus",
+  "Perpetua",
+  "Playbill",
+  "Playfair Display",
+  "PMingLiU",
+  "Poppins",
+  "Pristina",
+  "Rage Italic",
+  "Ravie",
+  "Roboto",
+  "Rockwell",
+  "Segoe Print",
+  "Segoe Script",
+  "Segoe UI",
+  "Showcard Gothic",
+  "SimSun",
+  "Snap ITC",
+  "Source Code Pro",
+  "Stencil",
+  "Sylfaen",
+  "Tahoma",
+  "Tempus Sans ITC",
+  "Times New Roman",
+  "Trebuchet MS",
+  "Crimson Text",
+  "Tw Cen MT",
+  "Verdana",
+  "Viner Hand ITC",
+  "Vivaldi",
+  "Vladimir Script",
+  "Webdings",
+  "Wingdings",
+  "Wingdings 2",
+  "Wingdings 3",
 ];
 
 interface TextConfig {
   fontFamily: string;
   fontSize: number;
   textColor: string;
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline" | "line-through";
 }
+
+interface DateConfig {
+  fontFamily: string;
+  fontSize: number;
+  dateFormat: string;
+  textColor: string;
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline" | "line-through";
+}
+
+const DATE_FORMATS = [
+  { value: "dd/mm/YYYY", label: "dd/mm/YYYY", example: "21/12/2025" },
+  { value: "dd/mm", label: "dd/mm", example: "21/12" },
+  { value: "mm/dd/YYYY", label: "mm/dd/YYYY", example: "12/21/2025" },
+  { value: "mm/dd", label: "mm/dd", example: "12/21" },
+  { value: "dd.mm.YYYY", label: "dd.mm.YYYY", example: "21.12.2025" },
+  { value: "dd.mm", label: "dd.mm", example: "21.12" },
+  { value: "mm.dd.YYYY", label: "mm.dd.YYYY", example: "12.21.2025" },
+  { value: "mm.dd", label: "mm.dd", example: "12.21" },
+  { value: "YYYY/mm/dd", label: "YYYY/mm/dd", example: "2025/12/21" },
+  { value: "YYYY/mm", label: "YYYY/mm", example: "2025/12" },
+];
 
 interface TemplateFormData {
   title: string;
@@ -54,9 +196,10 @@ interface TemplateFormData {
   finalPageImageUrl?: string;
   productTitleConfig: TextConfig;
   labelTextConfig: TextConfig;
+  originalPriceConfig: TextConfig;
   discountedPriceConfig: TextConfig;
   unitOfMeasureConfig: TextConfig;
-  dateTextConfig: Pick<TextConfig, "fontFamily" | "fontSize">;
+  dateTextConfig: DateConfig;
 }
 
 interface TemplateFormFiles {
@@ -71,6 +214,9 @@ const DEFAULT_TEXT_CONFIG: TextConfig = {
   fontFamily: "Inter",
   fontSize: 16,
   textColor: "#000000",
+  fontWeight: "normal",
+  fontStyle: "normal",
+  textDecoration: "none",
 };
 
 export default function TemplateSetupPage() {
@@ -85,9 +231,10 @@ export default function TemplateSetupPage() {
     type: "single_page",
     productTitleConfig: DEFAULT_TEXT_CONFIG,
     labelTextConfig: DEFAULT_TEXT_CONFIG,
-    discountedPriceConfig: DEFAULT_TEXT_CONFIG,
+    originalPriceConfig: { ...DEFAULT_TEXT_CONFIG, textDecoration: "line-through" },
+    discountedPriceConfig: { ...DEFAULT_TEXT_CONFIG, textColor: "#dc2626", fontWeight: "bold" },
     unitOfMeasureConfig: DEFAULT_TEXT_CONFIG,
-    dateTextConfig: { fontFamily: "Inter", fontSize: 12 },
+    dateTextConfig: { fontFamily: "Inter", fontSize: 12, dateFormat: "dd/mm/YYYY", textColor: "#000000", fontWeight: "normal", fontStyle: "normal", textDecoration: "none" },
   });
 
   const [files, setFiles] = useState<TemplateFormFiles>({});
@@ -111,6 +258,7 @@ export default function TemplateSetupPage() {
       }
       formDataObj.append("productTitleConfig", JSON.stringify(formData.productTitleConfig));
       formDataObj.append("labelTextConfig", JSON.stringify(formData.labelTextConfig));
+      formDataObj.append("originalPriceConfig", JSON.stringify(formData.originalPriceConfig));
       formDataObj.append("discountedPriceConfig", JSON.stringify(formData.discountedPriceConfig));
       formDataObj.append("unitOfMeasureConfig", JSON.stringify(formData.unitOfMeasureConfig));
       formDataObj.append("dateTextConfig", JSON.stringify(formData.dateTextConfig));
@@ -132,12 +280,12 @@ export default function TemplateSetupPage() {
         formDataObj.append("labelImage", files.labelImage);
       }
       
-      return apiRequest("POST", "/api/templates/setup", formDataObj);
+      return apiRequest("POST", "/api/templates/setup", formDataObj) as Promise<{ id: string }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
       toast({ title: t("common.success"), description: t("templates.savedSuccessfully") });
-      setLocation("/templates");
+      setLocation(`/templates/${data.id}/edit`);
     },
     onError: () => {
       toast({ title: t("common.error"), description: t("templates.saveFailed"), variant: "destructive" });
@@ -301,7 +449,12 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload cover page</p>
-                      {files.coverPageImage && <p className="text-xs text-muted-foreground mt-2">{files.coverPageImage.name}</p>}
+                      {files.coverPageImage && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">{files.coverPageImage.name}</p>
+                          <img src={URL.createObjectURL(files.coverPageImage)} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      )}
                       <input
                         ref={coverPageImageInputRef}
                         type="file"
@@ -320,7 +473,12 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload middle page</p>
-                      {files.middlePageImage && <p className="text-xs text-muted-foreground mt-2">{files.middlePageImage.name}</p>}
+                      {files.middlePageImage && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">{files.middlePageImage.name}</p>
+                          <img src={URL.createObjectURL(files.middlePageImage)} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      )}
                       <input
                         ref={middlePageImageInputRef}
                         type="file"
@@ -339,7 +497,12 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload final page</p>
-                      {files.finalPageImage && <p className="text-xs text-muted-foreground mt-2">{files.finalPageImage.name}</p>}
+                      {files.finalPageImage && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">{files.finalPageImage.name}</p>
+                          <img src={URL.createObjectURL(files.finalPageImage)} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      )}
                       <input
                         ref={finalPageImageInputRef}
                         type="file"
@@ -363,7 +526,12 @@ export default function TemplateSetupPage() {
                 >
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm font-medium">Click to upload label image</p>
-                  {files.labelImage && <p className="text-xs text-muted-foreground mt-2">{files.labelImage.name}</p>}
+                  {files.labelImage && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">{files.labelImage.name}</p>
+                      <img src={URL.createObjectURL(files.labelImage)} alt="preview" className="max-h-32 mx-auto rounded" />
+                    </div>
+                  )}
                   <input
                     ref={labelImageInputRef}
                     type="file"
@@ -408,6 +576,7 @@ export default function TemplateSetupPage() {
                     config={formData.productTitleConfig}
                     onChange={(config) => setFormData({ ...formData, productTitleConfig: config })}
                     includeColor
+                    previewText="Product Name"
                   />
                 </TabsContent>
 
@@ -416,15 +585,137 @@ export default function TemplateSetupPage() {
                     config={formData.labelTextConfig}
                     onChange={(config) => setFormData({ ...formData, labelTextConfig: config })}
                     includeColor
+                    previewText="Special Offer"
                   />
                 </TabsContent>
 
                 <TabsContent value="price" className="space-y-4">
-                  <StyleConfigForm
-                    config={formData.discountedPriceConfig}
-                    onChange={(config) => setFormData({ ...formData, discountedPriceConfig: config })}
-                    includeColor
-                  />
+                  {/* Price Preview on Label Image */}
+                  <div className="p-4 border rounded-lg bg-muted/30">
+                    <Label className="text-xs text-muted-foreground mb-2 block">Live Preview on Label</Label>
+                    <div 
+                      className="relative bg-background rounded border min-h-[120px] flex items-center justify-center overflow-hidden"
+                      data-testid="price-label-preview"
+                    >
+                      {files.labelImage ? (
+                        <div className="relative w-full h-32">
+                          <img 
+                            src={URL.createObjectURL(files.labelImage)} 
+                            alt="Label preview" 
+                            className="w-full h-full object-contain"
+                          />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                            <span
+                              style={{
+                                fontFamily: formData.originalPriceConfig.fontFamily,
+                                fontSize: `${Math.min(formData.originalPriceConfig.fontSize, 24)}px`,
+                                color: formData.originalPriceConfig.textColor,
+                                fontWeight: formData.originalPriceConfig.fontWeight === "bold" ? "bold" : "normal",
+                                fontStyle: formData.originalPriceConfig.fontStyle === "italic" ? "italic" : "normal",
+                                textDecoration: formData.originalPriceConfig.textDecoration === "underline" ? "underline" : formData.originalPriceConfig.textDecoration === "line-through" ? "line-through" : "none",
+                              }}
+                            >
+                              $129.99
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: formData.discountedPriceConfig.fontFamily,
+                                fontSize: `${Math.min(formData.discountedPriceConfig.fontSize, 32)}px`,
+                                color: formData.discountedPriceConfig.textColor,
+                                fontWeight: formData.discountedPriceConfig.fontWeight === "bold" ? "bold" : "normal",
+                                fontStyle: formData.discountedPriceConfig.fontStyle === "italic" ? "italic" : "normal",
+                                textDecoration: formData.discountedPriceConfig.textDecoration === "underline" ? "underline" : formData.discountedPriceConfig.textDecoration === "line-through" ? "line-through" : "none",
+                              }}
+                            >
+                              $99.99
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: formData.unitOfMeasureConfig.fontFamily,
+                                fontSize: `${Math.min(formData.unitOfMeasureConfig.fontSize, 14)}px`,
+                                color: formData.unitOfMeasureConfig.textColor,
+                                fontWeight: formData.unitOfMeasureConfig.fontWeight === "bold" ? "bold" : "normal",
+                                fontStyle: formData.unitOfMeasureConfig.fontStyle === "italic" ? "italic" : "normal",
+                              }}
+                            >
+                              per kg
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-1 p-4">
+                          <span className="text-muted-foreground text-sm mb-2">Upload a label image to see preview</span>
+                          <span
+                            style={{
+                              fontFamily: formData.originalPriceConfig.fontFamily,
+                              fontSize: `${Math.min(formData.originalPriceConfig.fontSize, 24)}px`,
+                              color: formData.originalPriceConfig.textColor,
+                              fontWeight: formData.originalPriceConfig.fontWeight === "bold" ? "bold" : "normal",
+                              fontStyle: formData.originalPriceConfig.fontStyle === "italic" ? "italic" : "normal",
+                              textDecoration: formData.originalPriceConfig.textDecoration === "underline" ? "underline" : formData.originalPriceConfig.textDecoration === "line-through" ? "line-through" : "none",
+                            }}
+                          >
+                            $129.99
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: formData.discountedPriceConfig.fontFamily,
+                              fontSize: `${Math.min(formData.discountedPriceConfig.fontSize, 32)}px`,
+                              color: formData.discountedPriceConfig.textColor,
+                              fontWeight: formData.discountedPriceConfig.fontWeight === "bold" ? "bold" : "normal",
+                              fontStyle: formData.discountedPriceConfig.fontStyle === "italic" ? "italic" : "normal",
+                              textDecoration: formData.discountedPriceConfig.textDecoration === "underline" ? "underline" : formData.discountedPriceConfig.textDecoration === "line-through" ? "line-through" : "none",
+                            }}
+                          >
+                            $99.99
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: formData.unitOfMeasureConfig.fontFamily,
+                              fontSize: `${Math.min(formData.unitOfMeasureConfig.fontSize, 14)}px`,
+                              color: formData.unitOfMeasureConfig.textColor,
+                              fontWeight: formData.unitOfMeasureConfig.fontWeight === "bold" ? "bold" : "normal",
+                              fontStyle: formData.unitOfMeasureConfig.fontStyle === "italic" ? "italic" : "normal",
+                            }}
+                          >
+                            per kg
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-medium mb-3 flex items-center gap-2">
+                        Original Price
+                        <Badge variant="secondary" className="text-xs">Strikethrough recommended</Badge>
+                      </h4>
+                      <StyleConfigForm
+                        config={formData.originalPriceConfig}
+                        onChange={(config) => setFormData({ ...formData, originalPriceConfig: config })}
+                        includeColor
+                        previewText="$129.99"
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <h4 className="font-medium mb-3 flex items-center gap-2">
+                        Discounted Price
+                        <Badge variant="secondary" className="text-xs">Highlighted</Badge>
+                      </h4>
+                      <StyleConfigForm
+                        config={formData.discountedPriceConfig}
+                        onChange={(config) => setFormData({ ...formData, discountedPriceConfig: config })}
+                        includeColor
+                        previewText="$99.99"
+                      />
+                    </div>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="unit" className="space-y-4">
@@ -432,6 +723,7 @@ export default function TemplateSetupPage() {
                     config={formData.unitOfMeasureConfig}
                     onChange={(config) => setFormData({ ...formData, unitOfMeasureConfig: config })}
                     includeColor
+                    previewText="per kg"
                   />
                 </TabsContent>
 
@@ -509,13 +801,35 @@ function StyleConfigForm({
   config,
   onChange,
   includeColor = true,
+  previewText = "Sample Text Preview",
 }: {
   config: TextConfig;
   onChange: (config: TextConfig) => void;
   includeColor?: boolean;
+  previewText?: string;
 }) {
   return (
     <div className="space-y-4">
+      <div className="p-4 border rounded-lg bg-muted/30">
+        <Label className="text-xs text-muted-foreground mb-2 block">Live Preview</Label>
+        <div 
+          className="p-3 bg-background rounded border min-h-[60px] flex items-center justify-center"
+          data-testid="text-style-preview"
+        >
+          <span
+            style={{
+              fontFamily: config.fontFamily,
+              fontSize: `${Math.min(config.fontSize, 48)}px`,
+              color: config.textColor,
+              fontWeight: config.fontWeight || "normal",
+              fontStyle: config.fontStyle || "normal",
+              textDecoration: config.textDecoration || "none",
+            }}
+          >
+            {previewText}
+          </span>
+        </div>
+      </div>
       <div>
         <Label>Font Family</Label>
         <Select value={config.fontFamily} onValueChange={(value) => onChange({ ...config, fontFamily: value })}>
@@ -531,16 +845,59 @@ function StyleConfigForm({
           </SelectContent>
         </Select>
       </div>
-      <div>
-        <Label>Font Size</Label>
-        <Input
-          type="number"
-          value={config.fontSize}
-          onChange={(e) => onChange({ ...config, fontSize: parseInt(e.target.value) })}
-          min="8"
-          max="100"
-          data-testid="input-font-size"
-        />
+      <div className="flex gap-4 flex-wrap">
+        <div className="flex-1 min-w-[120px]">
+          <Label>Font Size</Label>
+          <Input
+            type="number"
+            value={config.fontSize}
+            onChange={(e) => onChange({ ...config, fontSize: parseInt(e.target.value) })}
+            min="8"
+            max="100"
+            data-testid="input-font-size"
+          />
+        </div>
+        <div>
+          <Label>Font Style</Label>
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant={config.fontWeight === "bold" ? "default" : "outline"}
+              onClick={() => onChange({ ...config, fontWeight: config.fontWeight === "bold" ? "normal" : "bold" })}
+              data-testid="button-bold"
+            >
+              <Bold className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant={config.fontStyle === "italic" ? "default" : "outline"}
+              onClick={() => onChange({ ...config, fontStyle: config.fontStyle === "italic" ? "normal" : "italic" })}
+              data-testid="button-italic"
+            >
+              <Italic className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant={config.textDecoration === "underline" ? "default" : "outline"}
+              onClick={() => onChange({ ...config, textDecoration: config.textDecoration === "underline" ? "none" : "underline" })}
+              data-testid="button-underline"
+            >
+              <Underline className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant={config.textDecoration === "line-through" ? "default" : "outline"}
+              onClick={() => onChange({ ...config, textDecoration: config.textDecoration === "line-through" ? "none" : "line-through" })}
+              data-testid="button-strikethrough"
+            >
+              <Strikethrough className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
       {includeColor && (
         <div>
@@ -571,11 +928,65 @@ function DateStyleConfigForm({
   config,
   onChange,
 }: {
-  config: Pick<TextConfig, "fontFamily" | "fontSize">;
-  onChange: (config: Pick<TextConfig, "fontFamily" | "fontSize">) => void;
+  config: DateConfig;
+  onChange: (config: DateConfig) => void;
 }) {
+  const getFormattedDatePreview = (format: string) => {
+    const formatMap: Record<string, string> = {
+      "dd/mm/YYYY": "21/12/2025 - 28/12/2025",
+      "dd/mm": "21/12 - 28/12",
+      "mm/dd/YYYY": "12/21/2025 - 12/28/2025",
+      "mm/dd": "12/21 - 12/28",
+      "dd.mm.YYYY": "21.12.2025 - 28.12.2025",
+      "dd.mm": "21.12 - 28.12",
+      "mm.dd.YYYY": "12.21.2025 - 12.28.2025",
+      "mm.dd": "12.21 - 12.28",
+      "YYYY/mm/dd": "2025/12/21 - 2025/12/28",
+      "YYYY/mm": "2025/12 - 2025/12",
+    };
+    return formatMap[format] || "21/12/2025 - 28/12/2025";
+  };
+
   return (
     <div className="space-y-4">
+      <div className="p-4 border rounded-lg bg-muted/30">
+        <Label className="text-xs text-muted-foreground mb-2 block">Live Preview</Label>
+        <div 
+          className="p-3 bg-background rounded border min-h-[60px] flex items-center justify-center"
+          data-testid="date-style-preview"
+        >
+          <span
+            style={{
+              fontFamily: config.fontFamily,
+              fontSize: `${Math.min(config.fontSize, 48)}px`,
+              color: config.textColor,
+              fontWeight: config.fontWeight === "bold" ? "bold" : "normal",
+              fontStyle: config.fontStyle === "italic" ? "italic" : "normal",
+              textDecoration: config.textDecoration === "underline" ? "underline" : config.textDecoration === "line-through" ? "line-through" : "none",
+            }}
+          >
+            {getFormattedDatePreview(config.dateFormat)}
+          </span>
+        </div>
+      </div>
+      <div>
+        <Label>Date Format</Label>
+        <Select value={config.dateFormat} onValueChange={(value) => onChange({ ...config, dateFormat: value })}>
+          <SelectTrigger data-testid="select-date-format">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DATE_FORMATS.map((format) => (
+              <SelectItem key={format.value} value={format.value}>
+                <span className="flex items-center gap-2">
+                  <span className="font-medium">{format.label}</span>
+                  <span className="text-muted-foreground text-xs">({format.example})</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div>
         <Label>Font Family</Label>
         <Select value={config.fontFamily} onValueChange={(value) => onChange({ ...config, fontFamily: value })}>
@@ -601,6 +1012,66 @@ function DateStyleConfigForm({
           max="100"
           data-testid="input-date-font-size"
         />
+      </div>
+      <div>
+        <Label>Font Style</Label>
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            variant={config.fontWeight === "bold" ? "default" : "outline"}
+            size="icon"
+            onClick={() => onChange({ ...config, fontWeight: config.fontWeight === "bold" ? "normal" : "bold" })}
+            data-testid="button-date-bold"
+          >
+            <Bold className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={config.fontStyle === "italic" ? "default" : "outline"}
+            size="icon"
+            onClick={() => onChange({ ...config, fontStyle: config.fontStyle === "italic" ? "normal" : "italic" })}
+            data-testid="button-date-italic"
+          >
+            <Italic className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={config.textDecoration === "underline" ? "default" : "outline"}
+            size="icon"
+            onClick={() => onChange({ ...config, textDecoration: config.textDecoration === "underline" ? "none" : "underline" })}
+            data-testid="button-date-underline"
+          >
+            <Underline className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={config.textDecoration === "line-through" ? "default" : "outline"}
+            size="icon"
+            onClick={() => onChange({ ...config, textDecoration: config.textDecoration === "line-through" ? "none" : "line-through" })}
+            data-testid="button-date-strikethrough"
+          >
+            <Strikethrough className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <div>
+        <Label>Text Color</Label>
+        <div className="flex gap-2">
+          <input
+            type="color"
+            value={config.textColor}
+            onChange={(e) => onChange({ ...config, textColor: e.target.value })}
+            className="h-10 w-20 cursor-pointer rounded border"
+            data-testid="input-date-text-color"
+          />
+          <Input
+            value={config.textColor}
+            onChange={(e) => onChange({ ...config, textColor: e.target.value })}
+            placeholder="#000000"
+            className="flex-1"
+            data-testid="input-date-text-color-hex"
+          />
+        </div>
       </div>
     </div>
   );

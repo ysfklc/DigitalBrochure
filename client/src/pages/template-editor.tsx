@@ -80,15 +80,33 @@ const CANVAS_SIZES: Record<CanvasSizeKey, { width: number; height: number; label
 };
 
 const FONT_FAMILIES = [
-  { value: 'Inter', label: 'Inter' },
-  { value: 'Arial', label: 'Arial' },
-  { value: 'Georgia', label: 'Georgia' },
-  { value: 'Times New Roman', label: 'Times New Roman' },
-  { value: 'Courier New', label: 'Courier New' },
-  { value: 'Verdana', label: 'Verdana' },
-  { value: 'Helvetica', label: 'Helvetica' },
-  { value: 'Trebuchet MS', label: 'Trebuchet MS' },
-];
+  "Algerian", "Arial", "Arial Black", "Arial Unicode MS", "Baskerville Old Face",
+  "Bauhaus 93", "Batang", "Bell MT", "Berlin Sans FB", "Bernard MT Condensed",
+  "Bodoni MT", "Book Antiqua", "Bookman Old Style", "Bradley Hand ITC", "Broadway",
+  "Brush Script MT", "Calibri", "Californian FB", "Cambria", "Candara", "Castellar",
+  "Century", "Century Gothic", "Century Schoolbook", "Chiller", "Colonna MT",
+  "Comic Sans MS", "Consolas", "Constantia", "Cooper Black", "Corbel", "Courier New",
+  "Crimson Text", "Curlz MT", "Dancing Script", "Edwardian Script ITC", "Elephant",
+  "Engravers MT", "Eras Bold ITC", "Eras Demi ITC", "Eras Light ITC", "Eras Medium ITC",
+  "Felix Titling", "Fira Code", "Footlight MT Light", "Forte", "Franklin Gothic Medium",
+  "Freestyle Script", "French Script MT", "Garamond", "Georgia", "Gill Sans MT",
+  "Goudy Old Style", "Great Vibes", "Gulim", "Haettenschweiler", "Harlow Solid Italic",
+  "Harrington", "High Tower Text", "Impact", "Imprint MT Shadow", "Inconsolata",
+  "Informal Roman", "Inter", "JetBrains Mono", "Jokerman", "Juice ITC", "Kristen ITC",
+  "Lato", "Libre Baskerville", "Lobster", "Lucida Bright", "Lucida Calligraphy",
+  "Lucida Console", "Lucida Fax", "Lucida Handwriting", "Lucida Sans",
+  "Lucida Sans Typewriter", "Lucida Sans Unicode", "Magneto", "Maiandra GD", "Marlett",
+  "Matura MT Script Capitals", "Merriweather", "Microsoft Sans Serif", "Mistral",
+  "Modern No. 20", "Montserrat", "Monotype Corsiva", "MS Gothic", "MS Mincho",
+  "MS Sans Serif", "MS Serif", "Niagara Engraved", "Niagara Solid", "Nunito",
+  "Old English Text MT", "Onyx", "Open Sans", "Pacifico", "Palace Script MT",
+  "Palatino Linotype", "Papyrus", "Perpetua", "Playbill", "Playfair Display",
+  "PMingLiU", "Poppins", "Pristina", "Rage Italic", "Ravie", "Roboto", "Rockwell",
+  "Segoe Print", "Segoe Script", "Segoe UI", "Showcard Gothic", "SimSun", "Snap ITC",
+  "Source Code Pro", "Stencil", "Sylfaen", "Tahoma", "Tempus Sans ITC",
+  "Times New Roman", "Trebuchet MS", "Tw Cen MT", "Verdana", "Viner Hand ITC",
+  "Vivaldi", "Vladimir Script", "Webdings", "Wingdings", "Wingdings 2", "Wingdings 3",
+].map(font => ({ value: font, label: font }));
 
 const FONT_SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 96];
 
@@ -177,7 +195,7 @@ export default function TemplateEditorPage() {
   const [copiedElement, setCopiedElement] = useState<CanvasElement | null>(null);
 
   const { data: template, isLoading: loadingTemplate } = useQuery<Template>({
-    queryKey: ['/api/templates', id],
+    queryKey: [`/api/templates/${id}`],
     enabled: !!id && id !== "new",
   });
 
@@ -187,11 +205,12 @@ export default function TemplateEditorPage() {
       setTemplateType(template.type as "single_page" | "multi_page");
       setBackgroundColor(template.backgroundColor || '#ffffff');
       
-      // Apply background image from template
+      // Apply background image from template based on type
       if (template.type === 'single_page' && template.backgroundImageUrl) {
         setBackgroundImageUrl(template.backgroundImageUrl);
-      } else if (template.type === 'multi_page' && template.coverPageImageUrl) {
-        setBackgroundImageUrl(template.coverPageImageUrl);
+      } else if (template.type === 'multi_page') {
+        // For multi-page, set total pages to 3 (cover, middle, final)
+        setTotalPages(3);
       }
       
       const canvasData = template.coverPageConfig as any;
@@ -206,6 +225,21 @@ export default function TemplateEditorPage() {
       }
     }
   }, [template]);
+
+  // Update background image when page changes for multi-page templates
+  useEffect(() => {
+    if (template && template.type === 'multi_page') {
+      if (currentPage === 1 && template.coverPageImageUrl) {
+        setBackgroundImageUrl(template.coverPageImageUrl);
+      } else if (currentPage === 2 && template.middlePageImageUrl) {
+        setBackgroundImageUrl(template.middlePageImageUrl);
+      } else if (currentPage === 3 && template.finalPageImageUrl) {
+        setBackgroundImageUrl(template.finalPageImageUrl);
+      } else {
+        setBackgroundImageUrl(null);
+      }
+    }
+  }, [template, currentPage]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -286,8 +320,9 @@ export default function TemplateEditorPage() {
     mutationFn: async ({ templateId, data }: { templateId: string; data: any }) => {
       return await apiRequest("PATCH", `/api/templates/${templateId}`, data) as any;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/templates/${variables.templateId}`] });
       toast({
         title: t("common.success"),
         description: t("templates.savedSuccessfully"),
@@ -1076,7 +1111,27 @@ export default function TemplateEditorPage() {
           </Popover>
         </div>
 
-        <div className="flex-1 overflow-auto bg-muted/50 p-8 flex items-start justify-center">
+        <div className="flex-1 overflow-auto bg-muted/50 flex flex-col">
+          {templateType === 'multi_page' && totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-3 bg-background border-b">
+              <span className="text-sm text-muted-foreground mr-2">Page:</span>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <Button
+                  key={pageNum}
+                  variant={currentPage === pageNum ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCurrentPage(pageNum)}
+                  data-testid={`button-page-${pageNum}`}
+                >
+                  {pageNum === 1 ? 'Cover' : pageNum === 2 ? 'Middle' : pageNum === 3 ? 'Final' : `Page ${pageNum}`}
+                </Button>
+              ))}
+              <span className="text-xs text-muted-foreground ml-2">
+                ({currentPage} of {totalPages})
+              </span>
+            </div>
+          )}
+          <div className="flex-1 p-8 flex items-start justify-center">
           <div
             ref={canvasRef}
             className={`relative shadow-xl transition-shadow ${
@@ -1186,6 +1241,7 @@ export default function TemplateEditorPage() {
                 />
               </svg>
             )}
+          </div>
           </div>
         </div>
 
@@ -1580,6 +1636,9 @@ export default function TemplateEditorPage() {
                 width: `${CANVAS_SIZES[canvasSize].width * 0.4}px`,
                 height: `${CANVAS_SIZES[canvasSize].height * 0.4}px`,
                 backgroundColor,
+                backgroundImage: backgroundImageUrl ? `url(${backgroundImageUrl})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
                 position: 'relative',
               }}
             >

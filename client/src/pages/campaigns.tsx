@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { 
   Plus, 
@@ -51,7 +53,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Campaign } from "@shared/schema";
+import type { Campaign, Template } from "@shared/schema";
 
 const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
   square: { width: 1080, height: 1080 },
@@ -61,43 +63,77 @@ const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
   a4landscape: { width: 1123, height: 794 },
 };
 
-function CampaignThumbnail({ campaign }: { campaign: Campaign }) {
+function CampaignThumbnail({ campaign, template }: { campaign: Campaign; template?: Template }) {
   const canvasData = campaign.canvasData as any;
+  const backgroundImageUrl = template?.backgroundImageUrl;
   
-  if (!canvasData?.elements?.length) {
+  if (!canvasData?.elements?.length && !backgroundImageUrl) {
     return <Calendar className="h-12 w-12 text-muted-foreground" />;
   }
   
-  const elements = canvasData.elements || [];
-  const canvasSize = canvasData.canvasSize || 'a4portrait';
+  const elements = canvasData?.elements || [];
+  const canvasSize = canvasData?.canvasSize || 'a4portrait';
   const baseWidth = CANVAS_SIZES[canvasSize]?.width || 794;
   const baseHeight = CANVAS_SIZES[canvasSize]?.height || 1123;
   
   const containerWidth = 200;
   const containerHeight = 160;
-  const scale = Math.min(containerWidth / baseWidth, containerHeight / baseHeight) * 0.9;
+  const scale = Math.min(containerWidth / baseWidth, containerHeight / baseHeight) * 0.85;
   
   const scaledWidth = baseWidth * scale;
   const scaledHeight = baseHeight * scale;
+  
+  // Filter page 1 elements - ensure type comparison works for both string and number
+  const page1Elements = elements.filter((el: any) => el.page === 1 || el.page === undefined);
 
   const renderElement = (element: any) => {
     if (element.type === 'product') {
       const productData = element.data?.product || element.data;
       const imageUrl = productData?.imageUrl;
+      const price = element.data?.campaignPrice || productData?.price;
+      const discountPrice = element.data?.campaignDiscountPrice || productData?.discountPrice;
+      const labelImageUrl = template?.labelImageUrl;
+      
+      // Calculate price label dimensions - 1/6 of product size
+      const labelWidth = Math.max((element.width * scale) / 6, 12);
+      const labelHeight = Math.max((element.height * scale) / 6, 10);
       
       return (
-        <div className="w-full h-full bg-card border rounded-sm overflow-hidden flex flex-col">
-          <div className="flex-1 bg-muted flex items-center justify-center overflow-hidden">
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            ) : (
+        <div className="w-full h-full relative overflow-visible">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt=""
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
               <Package className="h-3 w-3 text-muted-foreground" />
-            )}
-          </div>
+            </div>
+          )}
+          {/* Price Label - Bottom right corner */}
+          {(price || discountPrice) && (
+            <div 
+              className="absolute flex items-center justify-center rounded-sm overflow-hidden"
+              style={{ 
+                right: 0,
+                bottom: 0,
+                width: `${labelWidth}px`,
+                height: `${labelHeight}px`,
+                backgroundImage: labelImageUrl ? `url(${labelImageUrl})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundColor: labelImageUrl ? 'transparent' : 'hsl(var(--primary))',
+              }}
+            >
+              <span 
+                className="font-bold text-white leading-none"
+                style={{ fontSize: `${Math.max(labelHeight * 0.5, 5)}px` }}
+              >
+                ${discountPrice || price}
+              </span>
+            </div>
+          )}
         </div>
       );
     }
@@ -167,13 +203,17 @@ function CampaignThumbnail({ campaign }: { campaign: Campaign }) {
 
   return (
     <div 
-      className="relative bg-white rounded shadow-sm overflow-hidden"
+      className="relative border border-border rounded shadow-sm overflow-hidden"
       style={{
         width: scaledWidth,
         height: scaledHeight,
+        backgroundColor: backgroundImageUrl ? undefined : 'white',
+        backgroundImage: backgroundImageUrl ? `url(${backgroundImageUrl})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
-      {elements.filter((el: any) => el.page === 1).map((element: any) => (
+      {page1Elements.map((element: any) => (
         <div
           key={element.id}
           className="absolute"
@@ -195,6 +235,7 @@ function CampaignThumbnail({ campaign }: { campaign: Campaign }) {
 
 export default function CampaignsPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -203,6 +244,36 @@ export default function CampaignsPage() {
 
   const { data: campaigns, isLoading } = useQuery<Campaign[]>({
     queryKey: ["/api/campaigns"],
+  });
+
+  const { data: templates } = useQuery<Template[]>({
+    queryKey: ["/api/templates"],
+  });
+
+  // Create a map for quick template lookup
+  const templateMap = templates?.reduce((acc, template) => {
+    acc[template.id] = template;
+    return acc;
+  }, {} as Record<string, Template>) || {};
+
+  const deleteMutation = useMutation({
+    mutationFn: async (campaignId: string) => {
+      await apiRequest("DELETE", `/api/campaigns/${campaignId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      toast({
+        title: t("common.success"),
+        description: t("campaigns.campaignDeleted"),
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: t("campaigns.deleteError"),
+        variant: "destructive",
+      });
+    },
   });
 
   const filteredCampaigns = campaigns?.filter((campaign) => {
@@ -239,6 +310,9 @@ export default function CampaignsPage() {
   };
 
   const confirmDelete = () => {
+    if (selectedCampaign) {
+      deleteMutation.mutate(selectedCampaign.id);
+    }
     setDeleteDialogOpen(false);
     setSelectedCampaign(null);
   };
@@ -341,7 +415,7 @@ export default function CampaignsPage() {
               <Card key={campaign.id} className="overflow-hidden" data-testid={`card-campaign-${campaign.id}`}>
                 <CardHeader className="p-0 relative">
                   <div className="h-40 bg-muted flex items-center justify-center">
-                    <CampaignThumbnail campaign={campaign} />
+                    <CampaignThumbnail campaign={campaign} template={campaign.templateId ? templateMap[campaign.templateId] : undefined} />
                   </div>
                   <Badge
                     variant={getStatusBadgeVariant(campaign.status)}

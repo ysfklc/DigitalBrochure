@@ -398,8 +398,18 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getAllSuggestions(): Promise<Suggestion[]> {
-    return db.select().from(suggestions).orderBy(desc(suggestions.createdAt));
+  async getAllSuggestions(): Promise<(Suggestion & { user?: { firstName: string; lastName: string; email: string }; tenant?: { name: string } })[]> {
+    const allSuggestions = await db.select().from(suggestions).orderBy(desc(suggestions.createdAt));
+    const result = await Promise.all(allSuggestions.map(async (s) => {
+      const user = s.userId ? await this.getUser(s.userId) : undefined;
+      const tenant = s.tenantId ? await this.getTenant(s.tenantId) : undefined;
+      return {
+        ...s,
+        user: user ? { firstName: user.firstName, lastName: user.lastName, email: user.email } : undefined,
+        tenant: tenant ? { name: tenant.name } : undefined,
+      };
+    }));
+    return result;
   }
 
   async deleteSuggestion(id: string): Promise<boolean> {

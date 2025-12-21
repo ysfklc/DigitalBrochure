@@ -30,7 +30,7 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL
 - **ORM**: Drizzle ORM with drizzle-kit for migrations
 - **Schema Location**: `shared/schema.ts` contains all table definitions and Zod validation schemas
-- **Key Entities**: Users, Tenants, Subscriptions, Products, Templates, Campaigns, Messages, Suggestions, Tutorials, System Config
+- **Key Entities**: Users, Tenants, Subscriptions, Products, Templates, Campaigns, Messages, Suggestions (with adminComment field), Tutorials, System Config
 
 ### Authentication & Authorization
 - **Authentication Flow**: Email/password login with mandatory TOTP-based 2FA
@@ -80,6 +80,12 @@ Preferred communication style: Simple, everyday language.
 
 ### Social Media Integration
 - Designed for sharing campaigns to Instagram and Facebook (implementation pending)
+
+### Suggestions Management
+- **Admin Suggestions Page**: Dedicated page at `/admin/suggestions` for SuperAdmin to manage all tenant suggestions
+- **Status Updates**: SuperAdmin can update suggestion status (pending, reviewed, implemented)
+- **Admin Comments**: SuperAdmin can add comments when changing status, visible to the user who submitted the suggestion
+- **Full History**: Users can see admin responses on their own suggestions page
 
 ### Product Connectors
 - **Dynamic Product Search**: Super Admins can configure external API connectors to fetch products in real-time

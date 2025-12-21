@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
   LayoutDashboard, 
   Package, 
@@ -27,16 +28,52 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import type { Message, Suggestion } from "@shared/schema";
 
 export function AppSidebar() {
   const { t } = useTranslation();
   const [location] = useLocation();
   const { user, logout } = useAuth();
+
+  const { data: inboxMessages } = useQuery<Message[]>({
+    queryKey: ["/api/messages", "inbox"],
+    queryFn: async () => {
+      const response = await fetch("/api/messages?type=inbox", {
+        credentials: "include",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("authToken")}`
+        }
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
+
+  const unreadCount = inboxMessages?.filter(m => !m.isRead).length || 0;
+
+  const { data: suggestions } = useQuery<Suggestion[]>({
+    queryKey: ["/api/suggestions"],
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
+
+  const pendingSuggestionsCount = suggestions?.filter(s => s.status === "pending").length || 0;
+
+  const { data: allSuggestions } = useQuery<Suggestion[]>({
+    queryKey: ["/api/admin/suggestions"],
+    enabled: !!user && user.role === "super_admin",
+    refetchInterval: 30000,
+  });
+
+  const allPendingSuggestionsCount = allSuggestions?.filter(s => s.status === "pending").length || 0;
 
   const mainNavItems = [
     { title: t("nav.dashboard"), url: "/dashboard", icon: LayoutDashboard },
@@ -59,6 +96,7 @@ export function AppSidebar() {
 
   const superAdminItems = [
     { title: t("nav.tenants"), url: "/tenants", icon: Building2 },
+    { title: t("nav.adminSuggestions"), url: "/admin/suggestions", icon: Lightbulb },
     { title: t("nav.settings"), url: "/settings", icon: Settings2 },
   ];
 
@@ -133,6 +171,16 @@ export function AppSidebar() {
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
+                  {item.url === "/messages" && unreadCount > 0 && (
+                    <SidebarMenuBadge className="bg-destructive text-destructive-foreground" data-testid="badge-unread-messages">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </SidebarMenuBadge>
+                  )}
+                  {item.url === "/suggestions" && pendingSuggestionsCount > 0 && (
+                    <SidebarMenuBadge className="bg-destructive text-destructive-foreground" data-testid="badge-pending-suggestions">
+                      {pendingSuggestionsCount > 99 ? "99+" : pendingSuggestionsCount}
+                    </SidebarMenuBadge>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -184,6 +232,11 @@ export function AppSidebar() {
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
+                    {item.url === "/admin/suggestions" && allPendingSuggestionsCount > 0 && (
+                      <SidebarMenuBadge className="bg-destructive text-destructive-foreground" data-testid="badge-admin-pending-suggestions">
+                        {allPendingSuggestionsCount > 99 ? "99+" : allPendingSuggestionsCount}
+                      </SidebarMenuBadge>
+                    )}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

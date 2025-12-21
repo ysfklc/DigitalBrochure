@@ -14,9 +14,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send, Plus, Trash2, Edit, Link, TestTube } from "lucide-react";
+import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send, Plus, Trash2, Edit, Link, TestTube, Lightbulb, Clock, CheckCircle, CheckCheck } from "lucide-react";
 import { useRoleVerification } from "@/lib/use-role-verification";
-import type { ProductConnector } from "@shared/schema";
+import type { ProductConnector, Suggestion } from "@shared/schema";
+import { Badge } from "@/components/ui/badge";
 
 interface IyzicoConfig {
   apiKey: string;
@@ -263,6 +264,59 @@ export default function SettingsPage() {
     },
   });
 
+  interface SuggestionWithUser extends Suggestion {
+    user?: { firstName: string; lastName: string; email: string };
+    tenant?: { name: string };
+  }
+
+  const { data: suggestions, isLoading: loadingSuggestions } = useQuery<SuggestionWithUser[]>({
+    queryKey: ["/api/admin/suggestions"],
+  });
+
+  const updateSuggestionMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return apiRequest("PATCH", `/api/admin/suggestions/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suggestions"] });
+      toast({ title: t("settings.suggestionUpdated") });
+    },
+    onError: () => {
+      toast({ title: t("settings.suggestionError"), variant: "destructive" });
+    },
+  });
+
+  const deleteSuggestionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/admin/suggestions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suggestions"] });
+      toast({ title: t("settings.suggestionDeleted") });
+    },
+    onError: () => {
+      toast({ title: t("settings.suggestionError"), variant: "destructive" });
+    },
+  });
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "pending": return <Clock className="h-4 w-4" />;
+      case "reviewed": return <CheckCircle className="h-4 w-4" />;
+      case "implemented": return <CheckCheck className="h-4 w-4" />;
+      default: return <Clock className="h-4 w-4" />;
+    }
+  };
+
+  const getStatusBadgeVariant = (status: string): "secondary" | "default" | "outline" => {
+    switch (status) {
+      case "pending": return "secondary";
+      case "reviewed": return "default";
+      case "implemented": return "outline";
+      default: return "secondary";
+    }
+  };
+
   const openConnectorDialog = (connector?: ProductConnector) => {
     if (connector) {
       setEditingConnector(connector);
@@ -348,6 +402,10 @@ export default function SettingsPage() {
           <TabsTrigger value="email" data-testid="tab-email">
             <Mail className="h-4 w-4 mr-2" />
             {t("settings.emailSettings")}
+          </TabsTrigger>
+          <TabsTrigger value="suggestions" data-testid="tab-suggestions">
+            <Lightbulb className="h-4 w-4 mr-2" />
+            {t("settings.suggestions")}
           </TabsTrigger>
         </TabsList>
 
@@ -694,6 +752,83 @@ export default function SettingsPage() {
                 {t("settings.testEmail")}
               </Button>
             </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="suggestions">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5" />
+                {t("settings.suggestionsTitle")}
+              </CardTitle>
+              <CardDescription>{t("settings.suggestionsDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingSuggestions ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+                </div>
+              ) : !suggestions?.length ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Lightbulb className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>{t("settings.noSuggestions")}</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {suggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      className="flex items-start justify-between gap-4 p-4 rounded-md border"
+                      data-testid={`suggestion-item-${suggestion.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-medium">{suggestion.title}</span>
+                          <Badge variant={getStatusBadgeVariant(suggestion.status || "pending")}>
+                            <span className="flex items-center gap-1">
+                              {getStatusIcon(suggestion.status || "pending")}
+                              {t(`suggestions.${suggestion.status || "pending"}`)}
+                            </span>
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                          {suggestion.content}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {suggestion.user && `${suggestion.user.firstName} ${suggestion.user.lastName}`}
+                          {suggestion.tenant && ` - ${suggestion.tenant.name}`}
+                          {` - ${new Date(suggestion.createdAt).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={suggestion.status || "pending"}
+                          onValueChange={(status) => updateSuggestionMutation.mutate({ id: suggestion.id, status })}
+                        >
+                          <SelectTrigger className="w-32" data-testid={`select-status-${suggestion.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">{t("suggestions.pending")}</SelectItem>
+                            <SelectItem value="reviewed">{t("suggestions.reviewed")}</SelectItem>
+                            <SelectItem value="implemented">{t("suggestions.implemented")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteSuggestionMutation.mutate(suggestion.id)}
+                          data-testid={`button-delete-suggestion-${suggestion.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

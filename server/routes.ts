@@ -946,7 +946,22 @@ export async function registerRoutes(
 
   app.post("/api/templates", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
     try {
-      const data = insertTemplateSchema.parse({ ...req.body, tenantId: req.user!.tenantId });
+      const templateData = { ...req.body, tenantId: req.user!.tenantId };
+      
+      // For multi-page templates, automatically set up 3 pages if not already configured
+      if (templateData.type === 'multi_page' && !templateData.coverPageConfig) {
+        templateData.coverPageConfig = {
+          elements: [],
+          canvasSize: 'a4portrait',
+          totalPages: 3,
+          headerHeight: 80,
+          footerHeight: 60,
+          showHeaderZone: true,
+          showFooterZone: true,
+        };
+      }
+      
+      const data = insertTemplateSchema.parse(templateData);
       const template = await storage.createTemplate(data);
       res.json(template);
     } catch (error) {
@@ -1015,6 +1030,22 @@ export async function registerRoutes(
       }
       if (files?.finalPageImage?.[0]) {
         templateData.finalPageImageUrl = `/uploads/${files.finalPageImage[0].filename}`;
+      }
+      if (files?.labelImage?.[0]) {
+        templateData.labelImageUrl = `/uploads/${files.labelImage[0].filename}`;
+      }
+
+      // For multi-page templates, automatically set up 3 pages (cover, middle, final)
+      if (type === 'multi_page') {
+        templateData.coverPageConfig = {
+          elements: [],
+          canvasSize: 'a4portrait',
+          totalPages: 3,
+          headerHeight: 80,
+          footerHeight: 60,
+          showHeaderZone: true,
+          showFooterZone: true,
+        };
       }
 
       const data = insertTemplateSchema.parse(templateData);
@@ -1781,6 +1812,33 @@ export async function registerRoutes(
       res.json(allSuggestions);
     } catch (error) {
       res.status(500).json({ error: "Failed to get suggestions" });
+    }
+  });
+
+  app.patch("/api/admin/suggestions/:id", authenticate, requireRole("super_admin"), async (req: AuthRequest, res: Response) => {
+    try {
+      const { status, adminComment } = req.body;
+      if (!status || !["pending", "reviewed", "implemented", "rejected"].includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      const updateData: { status: string; adminComment?: string } = { status };
+      if (adminComment && adminComment.trim()) {
+        // Get existing suggestion to append comment history
+        const existingSuggestion = await storage.getSuggestion(req.params.id);
+        const timestamp = new Date().toISOString();
+        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+        const newEntry = `[${timestamp}] Status: ${statusLabel}\n${adminComment.trim()}`;
+        
+        if (existingSuggestion?.adminComment) {
+          updateData.adminComment = existingSuggestion.adminComment + "\n\n---\n\n" + newEntry;
+        } else {
+          updateData.adminComment = newEntry;
+        }
+      }
+      const updated = await storage.updateSuggestion(req.params.id, updateData);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update suggestion" });
     }
   });
 

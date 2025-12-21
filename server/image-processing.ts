@@ -221,7 +221,13 @@ export async function removeBackgroundFromUrl(imageSource: string, outputDir: st
       const timeout = setTimeout(() => controller.abort(), 30000);
       
       try {
-        const response = await fetch(imageSource, { signal: controller.signal });
+        const response = await fetch(imageSource, { 
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/*,*/*;q=0.8',
+          }
+        });
         clearTimeout(timeout);
         
         if (!response.ok) {
@@ -241,11 +247,26 @@ export async function removeBackgroundFromUrl(imageSource: string, outputDir: st
       buffer = await fs.readFile(imageSource);
     }
     
-    const normalizedBuffer = await sharp(buffer).png().toBuffer();
-    const result = await removeBackground(normalizedBuffer);
+    // Ensure we have valid image data before processing
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Empty image buffer received');
+    }
+    
+    // Write to a temp file first - the library works better with file paths
+    const tempInputPath = path.join(outputDir, `temp_input_${timestamp}_${randomId}.png`);
+    await sharp(buffer)
+      .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+      .png()
+      .toFile(tempInputPath);
+    
+    // Pass the file path to removeBackground
+    const result = await removeBackground(tempInputPath);
     const resultArrayBuffer = await result.arrayBuffer();
     const outputPath = path.join(outputDir, `nobg_${timestamp}_${randomId}.png`);
     await sharp(Buffer.from(resultArrayBuffer)).png().toFile(outputPath);
+    
+    // Clean up temp file
+    await fs.remove(tempInputPath).catch(() => {});
     
     return outputPath;
   } catch (error) {
@@ -264,7 +285,13 @@ async function fetchImageBuffer(imageSource: string): Promise<Buffer> {
   const timeout = setTimeout(() => controller.abort(), 30000);
   
   try {
-    const response = await fetch(imageSource, { signal: controller.signal });
+    const response = await fetch(imageSource, { 
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/*,*/*;q=0.8',
+      }
+    });
     clearTimeout(timeout);
     
     if (!response.ok) {
@@ -309,10 +336,19 @@ export async function applyPresetFromUrl(imageSource: string, preset: string, ou
     if (isAlreadyProcessed) {
       cleanImg = sharp(buffer).png();
     } else {
-      const normalizedBuffer = await sharp(buffer).png().toBuffer();
-      const result = await removeBackground(normalizedBuffer);
+      // Write to a temp file first - the library works better with file paths
+      const tempInputPath = path.join(outputDir, `temp_preset_${timestamp}_${randomId}.png`);
+      await sharp(buffer)
+        .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+        .png()
+        .toFile(tempInputPath);
+      
+      const result = await removeBackground(tempInputPath);
       const resultArrayBuffer = await result.arrayBuffer();
       cleanImg = sharp(Buffer.from(resultArrayBuffer)).png();
+      
+      // Clean up temp file
+      await fs.remove(tempInputPath).catch(() => {});
     }
     
     const fn = PRESETS[preset];
