@@ -1178,7 +1178,8 @@ export default function CampaignEditorPage() {
       const name = productData.name;
       const price = element.data.campaignPrice || productData.price;
       const discountPrice = element.data.campaignDiscountPrice || productData.discountPrice;
-      const unit = productData.unit || 'each';
+      // Prioritize manually updated unit, then fall back to product unit
+      const unit = element.data.unit || element.data.product?.unit || productData.unit || 'each';
       const isProcessing = processingElementId === element.id;
       
       // Get price styling from template
@@ -2079,9 +2080,61 @@ export default function CampaignEditorPage() {
             <ScrollArea className="h-[calc(100vh-200px)]">
               <div className="p-4 space-y-4">
                 {selectedElementData.type === 'product' && (
-                  <div className="p-2 bg-muted rounded-md">
-                    <p className="text-sm font-medium">{selectedElementData.data.name}</p>
-                    <p className="text-xs text-muted-foreground">${selectedElementData.data.price}</p>
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs">{t("products.name")}</Label>
+                      <Input
+                        value={selectedElementData.data.product?.name || selectedElementData.data.name || ''}
+                        onChange={(e) => updateElementData('name', e.target.value)}
+                        className="mt-1"
+                        data-testid="input-product-name"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("products.price")}</Label>
+                      <Input
+                        type="number"
+                        value={selectedElementData.data.campaignPrice || selectedElementData.data.price || 0}
+                        onChange={(e) => updateElementData('campaignPrice', parseFloat(e.target.value) || 0)}
+                        className="mt-1"
+                        step="0.01"
+                        data-testid="input-product-price"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("editor.discountPrice")}</Label>
+                      <Input
+                        type="number"
+                        value={selectedElementData.data.campaignDiscountPrice || selectedElementData.data.discountPrice || 0}
+                        onChange={(e) => updateElementData('campaignDiscountPrice', parseFloat(e.target.value) || 0)}
+                        className="mt-1"
+                        step="0.01"
+                        data-testid="input-product-discount-price"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t("editor.unit")}</Label>
+                      <Select
+                        value={selectedElementData.data.unit || selectedElementData.data.product?.unit || 'each'}
+                        onValueChange={(v) => updateElementData('unit', v)}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-product-unit">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="each">Each</SelectItem>
+                          <SelectItem value="kg">Kg</SelectItem>
+                          <SelectItem value="lb">Lb</SelectItem>
+                          <SelectItem value="oz">Oz</SelectItem>
+                          <SelectItem value="ml">Ml</SelectItem>
+                          <SelectItem value="l">L</SelectItem>
+                          <SelectItem value="piece">Piece</SelectItem>
+                          <SelectItem value="dozen">Dozen</SelectItem>
+                          <SelectItem value="pack">Pack</SelectItem>
+                          <SelectItem value="box">Box</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
 
@@ -2373,8 +2426,12 @@ export default function CampaignEditorPage() {
                     {element.type === 'text' && <Type className="h-4 w-4 text-muted-foreground" />}
                     {element.type === 'shape' && <Square className="h-4 w-4 text-muted-foreground" />}
                     <span className="text-sm flex-1 truncate">
-                      {element.type === 'product' ? element.data.name : 
+                      {element.type === 'product' ? (element.data.product?.name || element.data.name || 'Product') : 
                        element.type === 'text' ? element.data.text.substring(0, 20) :
+                       element.type === 'image' ? 'Image' :
+                       element.type === 'header' ? 'Header' :
+                       element.type === 'footer' ? 'Footer' :
+                       element.type === 'date' ? 'Date' :
                        element.data.shapeType}
                     </span>
                   </div>

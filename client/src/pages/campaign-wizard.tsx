@@ -14,7 +14,8 @@ import {
   Tag,
   Globe,
   Database,
-  Loader2
+  Loader2,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -91,13 +99,18 @@ export default function CampaignWizardPage() {
   const [debouncedConnectorSearch, setDebouncedConnectorSearch] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
   const [productSourceTab, setProductSourceTab] = useState<"existing" | "connector">("existing");
-  const [productsPerPage, setProductsPerPage] = useState<number>(4);
+  const [productsPerPage, setProductsPerPage] = useState<number | null>(null);
+  const [loadingStage, setLoadingStage] = useState<"idle" | "creating" | "products" | "images" | "finalizing">("idle");
 
   // Canvas dimensions and layout configuration
   const CANVAS_WIDTH = 595; // A4 width
   const CANVAS_HEIGHT = 842; // A4 height
   const DEFAULT_HEADER_HEIGHT = 80;
   const DEFAULT_FOOTER_HEIGHT = 60;
+
+  const removeSelectedProduct = (productId: string) => {
+    setSelectedProducts(selectedProducts.filter((sp) => sp.productId !== productId));
+  };
 
   // Get grid configuration for 1-8 products (columns x rows)
   const getGridConfig = (count: number): { cols: number; rows: number } => {
@@ -333,10 +346,12 @@ export default function CampaignWizardPage() {
 
   const createCampaignMutation = useMutation({
     mutationFn: async (data: any) => {
+      setLoadingStage("creating");
       return await apiRequest("POST", "/api/campaigns", data) as any;
     },
     onSuccess: async (campaign) => {
-      if (selectedProducts.length > 0) {
+      if (selectedProducts.length > 0 && productsPerPage) {
+        setLoadingStage("products");
         // Calculate positions for all products across all pages
         const allPositions = calculateAllProductPositions(selectedProducts.length, productsPerPage);
         
@@ -347,7 +362,7 @@ export default function CampaignWizardPage() {
               y: 100 + Math.floor(index / 3) * 180,
               width: 120,
               height: 160,
-              page: Math.floor(index / productsPerPage) + 1,
+              page: Math.floor(index / (productsPerPage || 4)) + 1,
             };
             return {
               productId: sp.productId,
@@ -377,6 +392,7 @@ export default function CampaignWizardPage() {
         });
         
         // Remove backgrounds from product images and create canvas elements
+        setLoadingStage("images");
         const token = localStorage.getItem("authToken");
         const canvasElements = [];
         
@@ -387,7 +403,7 @@ export default function CampaignWizardPage() {
             y: 100 + Math.floor(index / 3) * 180,
             width: 200,
             height: 240,
-            page: Math.floor(index / productsPerPage) + 1,
+            page: Math.floor(index / (productsPerPage || 4)) + 1,
           };
           
           let finalImageUrl = sp.product.imageUrl;
@@ -439,6 +455,7 @@ export default function CampaignWizardPage() {
         }
         
         // Update campaign with canvas elements
+        setLoadingStage("finalizing");
         if (canvasElements.length > 0) {
           const existingCampaign = await apiRequest("GET", `/api/campaigns/${campaign.id}`) as any;
           const existingCanvasData = existingCampaign?.canvasData || {};
@@ -447,7 +464,7 @@ export default function CampaignWizardPage() {
             canvasData: {
               ...existingCanvasData,
               elements: canvasElements,
-              totalPages: Math.ceil(selectedProducts.length / productsPerPage),
+              totalPages: Math.ceil(selectedProducts.length / (productsPerPage || 4)),
             },
           });
         }
@@ -458,9 +475,11 @@ export default function CampaignWizardPage() {
         title: t("common.success"),
         description: t("campaigns.savedSuccessfully"),
       });
+      setLoadingStage("idle");
       setLocation(`/campaigns/${campaign.id}/edit`);
     },
     onError: () => {
+      setLoadingStage("idle");
       toast({
         title: t("common.error"),
         description: t("campaigns.saveFailed"),
@@ -490,6 +509,14 @@ export default function CampaignWizardPage() {
       toast({
         title: t("common.error"),
         description: t("wizard.fillDates"),
+        variant: "destructive",
+      });
+      return;
+    }
+    if (currentStep === 4 && !productsPerPage) {
+      toast({
+        title: t("common.error"),
+        description: t("wizard.selectProductsPerPage"),
         variant: "destructive",
       });
       return;
@@ -532,7 +559,7 @@ export default function CampaignWizardPage() {
           priceTagTemplateId: null,
           editableName: product.name,
           currency: "₺",
-          unit: "Piece",
+          unit: (product as any).unit || "Piece",
         },
       ]);
     }
@@ -560,6 +587,7 @@ export default function CampaignWizardPage() {
         tenantId: null,
         isGlobal: false,
         createdAt: new Date(),
+        ...(((connectorProduct as any).unit) && { unit: (connectorProduct as any).unit }),
       };
       
       setSelectedProducts([
@@ -573,7 +601,7 @@ export default function CampaignWizardPage() {
           isExternal: true,
           editableName: connectorProduct.name,
           currency: "₺",
-          unit: "Piece",
+          unit: (connectorProduct as any).unit || "Piece",
         },
       ]);
     }
@@ -1010,17 +1038,30 @@ export default function CampaignWizardPage() {
                         />
                       )}
                       <div className="flex-1 space-y-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Name</Label>
-                          <Input
-                            value={sp.editableName}
-                            onChange={(e) => updateProductProperty(sp.productId, "editableName", e.target.value)}
-                            placeholder="Product name"
-                            className="h-8"
-                            data-testid={`input-name-${sp.productId}`}
-                          />
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Name</Label>
+                              <Input
+                                value={sp.editableName}
+                                onChange={(e) => updateProductProperty(sp.productId, "editableName", e.target.value)}
+                                placeholder="Product name"
+                                className="h-8"
+                                data-testid={`input-name-${sp.productId}`}
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSelectedProduct(sp.productId)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            title={t("common.remove")}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1">
                             <Label className="text-xs">{t("wizard.campaignPrice")}</Label>
@@ -1125,7 +1166,7 @@ export default function CampaignWizardPage() {
                 </Button>
               ))}
             </div>
-            {selectedProducts.length > 0 && (
+            {selectedProducts.length > 0 && productsPerPage && (
               <p className="text-xs text-muted-foreground mt-2">
                 {t("wizard.pagesRequired")}: {Math.ceil(selectedProducts.length / productsPerPage)}
               </p>
@@ -1206,6 +1247,36 @@ export default function CampaignWizardPage() {
     }
   };
 
+  const getLoadingMessage = () => {
+    switch (loadingStage) {
+      case "creating":
+        return t("wizard.loadingCreating") || "Creating campaign...";
+      case "products":
+        return t("wizard.loadingProducts") || "Adding products...";
+      case "images":
+        return t("wizard.loadingImages") || "Processing product images...";
+      case "finalizing":
+        return t("wizard.loadingFinalizing") || "Finalizing and opening editor...";
+      default:
+        return "";
+    }
+  };
+
+  const getLoadingProgress = () => {
+    switch (loadingStage) {
+      case "creating":
+        return 25;
+      case "products":
+        return 50;
+      case "images":
+        return 75;
+      case "finalizing":
+        return 95;
+      default:
+        return 0;
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-4 p-6 border-b">
@@ -1223,7 +1294,7 @@ export default function CampaignWizardPage() {
         <Button
           variant="outline"
           onClick={handlePrevious}
-          disabled={currentStep === 1}
+          disabled={currentStep === 1 || createCampaignMutation.isPending}
           data-testid="button-previous"
         >
           <ChevronLeft className="w-4 h-4 mr-2" />
@@ -1245,6 +1316,28 @@ export default function CampaignWizardPage() {
           </Button>
         )}
       </div>
+
+      {/* Loading Dialog */}
+      <Dialog open={loadingStage !== "idle"} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogTitle>{t("common.creating")}</DialogTitle>
+          <DialogDescription className="sr-only">Campaign creation in progress</DialogDescription>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-center">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-center text-sm font-medium">
+                {getLoadingMessage()}
+              </p>
+              <Progress value={getLoadingProgress()} className="w-full" />
+              <p className="text-center text-xs text-muted-foreground">
+                {getLoadingProgress()}%
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
