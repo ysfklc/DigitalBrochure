@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { Plus, Upload, ChevronRight, Bold, Italic, Underline, Strikethrough } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { PriceTagTemplate } from "@shared/schema";
+import type { PriceTagTemplate, Template } from "@shared/schema";
 
 const AVAILABLE_FONTS = [
   "Algerian",
@@ -223,8 +223,10 @@ export default function TemplateSetupPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [step, setStep] = useState<"type-select" | "basic-info" | "images" | "styling" | "label">("type-select");
+  const { id } = useParams<{ id?: string }>();
+  const [step, setStep] = useState<"type-select" | "basic-info" | "images" | "styling" | "label">(id ? "basic-info" : "type-select");
   const [templateType, setTemplateType] = useState<"single_page" | "multi_page" | null>(null);
+  const [isEditing] = useState(!!id);
 
   const [formData, setFormData] = useState<TemplateFormData>({
     title: "",
@@ -238,6 +240,13 @@ export default function TemplateSetupPage() {
   });
 
   const [files, setFiles] = useState<TemplateFormFiles>({});
+  const [existingImageUrls, setExistingImageUrls] = useState<Partial<TemplateFormFiles & {
+    backgroundImageUrl?: string;
+    coverPageImageUrl?: string;
+    middlePageImageUrl?: string;
+    finalPageImageUrl?: string;
+    labelImageUrl?: string;
+  }>>({});
   const backgroundImageInputRef = useRef<HTMLInputElement>(null);
   const coverPageImageInputRef = useRef<HTMLInputElement>(null);
   const middlePageImageInputRef = useRef<HTMLInputElement>(null);
@@ -247,6 +256,42 @@ export default function TemplateSetupPage() {
   const { data: labelTemplates } = useQuery<PriceTagTemplate[]>({
     queryKey: ["/api/price-tag-templates"],
   });
+
+  const { data: existingTemplate } = useQuery<Template>({
+    queryKey: [`/api/templates/${id}`],
+    enabled: !!id,
+  });
+
+  // Load existing template data when editing
+  useEffect(() => {
+    if (id && existingTemplate) {
+      setFormData({
+        title: existingTemplate.title ?? "",
+        type: existingTemplate.type,
+        labelTemplateId: existingTemplate.labelTemplateId ?? undefined,
+        backgroundImageUrl: existingTemplate.backgroundImageUrl ?? undefined,
+        coverPageImageUrl: existingTemplate.coverPageImageUrl ?? undefined,
+        middlePageImageUrl: existingTemplate.middlePageImageUrl ?? undefined,
+        finalPageImageUrl: existingTemplate.finalPageImageUrl ?? undefined,
+        productTitleConfig: existingTemplate.productTitleConfig ?? DEFAULT_TEXT_CONFIG,
+        labelTextConfig: existingTemplate.labelTextConfig ?? DEFAULT_TEXT_CONFIG,
+        originalPriceConfig: existingTemplate.originalPriceConfig?.textDecoration === "line-through" ? existingTemplate.originalPriceConfig : DEFAULT_TEXT_CONFIG,
+        discountedPriceConfig: existingTemplate.discountedPriceConfig ?? { ...DEFAULT_TEXT_CONFIG, textColor: "#dc2626", fontWeight: "bold" },
+        unitOfMeasureConfig: existingTemplate.unitOfMeasureConfig ?? DEFAULT_TEXT_CONFIG,
+        dateTextConfig: existingTemplate.dateTextConfig ?? { fontFamily: "Inter", fontSize: 12, dateFormat: "dd/mm/YYYY", textColor: "#000000", fontWeight: "normal", fontStyle: "normal", textDecoration: "none" },
+      });
+      // Store existing image URLs for display
+      setExistingImageUrls({
+        backgroundImageUrl: existingTemplate.backgroundImageUrl || "",
+        coverPageImageUrl: existingTemplate.coverPageImageUrl || "",
+        middlePageImageUrl: existingTemplate.middlePageImageUrl || "",
+        finalPageImageUrl: existingTemplate.finalPageImageUrl || "",
+        labelImageUrl: existingTemplate.labelImageUrl || "",
+      });
+      setTemplateType(existingTemplate.type);
+      setStep("basic-info");
+    }
+  }, [id, existingTemplate]);
 
   const createTemplateMutation = useMutation({
     mutationFn: async () => {
@@ -280,11 +325,16 @@ export default function TemplateSetupPage() {
         formDataObj.append("labelImage", files.labelImage);
       }
       
-      return apiRequest("POST", "/api/templates/setup", formDataObj) as Promise<{ id: string }>;
+      if (isEditing && id) {
+        // Use PATCH for updating existing templates
+        return apiRequest("PATCH", `/api/templates/${id}`, formDataObj) as Promise<{ id: string }>;
+      } else {
+        return apiRequest("POST", "/api/templates/setup", formDataObj) as Promise<{ id: string }>;
+      }
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
-      toast({ title: t("common.success"), description: t("templates.savedSuccessfully") });
+      toast({ title: t("common.success"), description: isEditing ? "Template updated successfully" : t("templates.savedSuccessfully") });
       setLocation(`/templates/${data.id}/edit`);
     },
     onError: () => {
@@ -324,8 +374,8 @@ export default function TemplateSetupPage() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold">{t("templates.createTemplate")}</h1>
-          <p className="text-muted-foreground mt-2">Set up your brochure template with custom styling</p>
+          <h1 className="text-3xl font-semibold">{isEditing ? "Edit Template" : t("templates.createTemplate")}</h1>
+          <p className="text-muted-foreground mt-2">{isEditing ? "Update your brochure template configuration" : "Set up your brochure template with custom styling"}</p>
         </div>
 
         {step === "type-select" && (
@@ -420,12 +470,17 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload background image</p>
-                      {files.backgroundImage && (
+                      {files.backgroundImage ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-xs text-muted-foreground">{files.backgroundImage.name}</p>
                           <img src={URL.createObjectURL(files.backgroundImage)} alt="preview" className="max-h-32 mx-auto rounded" />
                         </div>
-                      )}
+                      ) : existingImageUrls.backgroundImageUrl ? (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">Current image</p>
+                          <img src={existingImageUrls.backgroundImageUrl} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      ) : null}
                       <input
                         ref={backgroundImageInputRef}
                         type="file"
@@ -449,12 +504,17 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload cover page</p>
-                      {files.coverPageImage && (
+                      {files.coverPageImage ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-xs text-muted-foreground">{files.coverPageImage.name}</p>
                           <img src={URL.createObjectURL(files.coverPageImage)} alt="preview" className="max-h-32 mx-auto rounded" />
                         </div>
-                      )}
+                      ) : existingImageUrls.coverPageImageUrl ? (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">Current image</p>
+                          <img src={existingImageUrls.coverPageImageUrl} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      ) : null}
                       <input
                         ref={coverPageImageInputRef}
                         type="file"
@@ -473,12 +533,17 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload middle page</p>
-                      {files.middlePageImage && (
+                      {files.middlePageImage ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-xs text-muted-foreground">{files.middlePageImage.name}</p>
                           <img src={URL.createObjectURL(files.middlePageImage)} alt="preview" className="max-h-32 mx-auto rounded" />
                         </div>
-                      )}
+                      ) : existingImageUrls.middlePageImageUrl ? (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">Current image</p>
+                          <img src={existingImageUrls.middlePageImageUrl} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      ) : null}
                       <input
                         ref={middlePageImageInputRef}
                         type="file"
@@ -497,12 +562,17 @@ export default function TemplateSetupPage() {
                     >
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium">Click to upload final page</p>
-                      {files.finalPageImage && (
+                      {files.finalPageImage ? (
                         <div className="mt-3 space-y-2">
                           <p className="text-xs text-muted-foreground">{files.finalPageImage.name}</p>
                           <img src={URL.createObjectURL(files.finalPageImage)} alt="preview" className="max-h-32 mx-auto rounded" />
                         </div>
-                      )}
+                      ) : existingImageUrls.finalPageImageUrl ? (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-muted-foreground">Current image</p>
+                          <img src={existingImageUrls.finalPageImageUrl} alt="preview" className="max-h-32 mx-auto rounded" />
+                        </div>
+                      ) : null}
                       <input
                         ref={finalPageImageInputRef}
                         type="file"
@@ -526,12 +596,17 @@ export default function TemplateSetupPage() {
                 >
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm font-medium">Click to upload label image</p>
-                  {files.labelImage && (
+                  {files.labelImage ? (
                     <div className="mt-3 space-y-2">
                       <p className="text-xs text-muted-foreground">{files.labelImage.name}</p>
                       <img src={URL.createObjectURL(files.labelImage)} alt="preview" className="max-h-32 mx-auto rounded" />
                     </div>
-                  )}
+                  ) : existingImageUrls.labelImageUrl ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">Current image</p>
+                      <img src={existingImageUrls.labelImageUrl} alt="preview" className="max-h-32 mx-auto rounded" />
+                    </div>
+                  ) : null}
                   <input
                     ref={labelImageInputRef}
                     type="file"
@@ -786,7 +861,7 @@ export default function TemplateSetupPage() {
                   disabled={createTemplateMutation.isPending}
                   data-testid="button-create-template"
                 >
-                  {createTemplateMutation.isPending ? "Creating..." : "Create Template"}
+                  {createTemplateMutation.isPending ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update Template" : "Create Template")}
                 </Button>
               </div>
             </CardContent>

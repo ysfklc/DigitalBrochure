@@ -107,6 +107,7 @@ function ProtectedRoutes() {
       <Route path="/products" component={() => <ProtectedRoute component={ProductsPage} />} />
       <Route path="/templates" component={() => <ProtectedRoute component={TemplatesPage} />} />
       <Route path="/templates/new" component={() => <ProtectedRoute component={TemplateSetupPage} />} />
+      <Route path="/templates/:id/setup" component={() => <ProtectedRoute component={TemplateSetupPage} />} />
       <Route path="/templates/:id/edit" component={() => <ProtectedRoute component={TemplateEditorPage} />} />
       <Route path="/campaigns" component={() => <ProtectedRoute component={CampaignsPage} />} />
       <Route path="/campaigns/new" component={() => <ProtectedRoute component={CampaignWizardPage} />} />

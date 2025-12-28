@@ -972,15 +972,64 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/templates/:id", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/templates/:id", authenticate, requireTenant, upload.fields([
+    { name: 'backgroundImage', maxCount: 1 },
+    { name: 'coverPageImage', maxCount: 1 },
+    { name: 'middlePageImage', maxCount: 1 },
+    { name: 'finalPageImage', maxCount: 1 },
+    { name: 'labelImage', maxCount: 1 },
+  ]), async (req: AuthRequest, res: Response) => {
     try {
       const template = await storage.getTemplate(req.params.id);
       if (!template || template.tenantId !== req.user!.tenantId) {
         return res.status(404).json({ error: "Template not found" });
       }
-      const updated = await storage.updateTemplate(req.params.id, req.body);
+
+      const {
+        title,
+        type,
+        labelTemplateId,
+        productTitleConfig,
+        labelTextConfig,
+        discountedPriceConfig,
+        unitOfMeasureConfig,
+        dateTextConfig,
+      } = req.body;
+
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+
+      const updateData: any = {};
+      
+      if (title) updateData.title = title;
+      if (type) updateData.type = type;
+      if (labelTemplateId !== undefined) updateData.labelTemplateId = labelTemplateId || null;
+      if (productTitleConfig) updateData.productTitleConfig = typeof productTitleConfig === 'string' ? JSON.parse(productTitleConfig) : productTitleConfig;
+      if (labelTextConfig) updateData.labelTextConfig = typeof labelTextConfig === 'string' ? JSON.parse(labelTextConfig) : labelTextConfig;
+      if (discountedPriceConfig) updateData.discountedPriceConfig = typeof discountedPriceConfig === 'string' ? JSON.parse(discountedPriceConfig) : discountedPriceConfig;
+      if (unitOfMeasureConfig) updateData.unitOfMeasureConfig = typeof unitOfMeasureConfig === 'string' ? JSON.parse(unitOfMeasureConfig) : unitOfMeasureConfig;
+      if (dateTextConfig) updateData.dateTextConfig = typeof dateTextConfig === 'string' ? JSON.parse(dateTextConfig) : dateTextConfig;
+
+      // Handle image updates
+      if (files?.backgroundImage?.[0]) {
+        updateData.backgroundImageUrl = `/uploads/${files.backgroundImage[0].filename}`;
+      }
+      if (files?.coverPageImage?.[0]) {
+        updateData.coverPageImageUrl = `/uploads/${files.coverPageImage[0].filename}`;
+      }
+      if (files?.middlePageImage?.[0]) {
+        updateData.middlePageImageUrl = `/uploads/${files.middlePageImage[0].filename}`;
+      }
+      if (files?.finalPageImage?.[0]) {
+        updateData.finalPageImageUrl = `/uploads/${files.finalPageImage[0].filename}`;
+      }
+      if (files?.labelImage?.[0]) {
+        updateData.labelImageUrl = `/uploads/${files.labelImage[0].filename}`;
+      }
+
+      const updated = await storage.updateTemplate(req.params.id, updateData);
       res.json(updated);
     } catch (error) {
+      console.error("Template update error:", error);
       res.status(500).json({ error: "Failed to update template" });
     }
   });

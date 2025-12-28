@@ -711,26 +711,26 @@ export default function CampaignEditorPage() {
   const handleExportPNG = async () => {
     try {
       const isMultiPage = campaign?.type === 'multi_page' || totalPages > 1;
-      const pagesToExport = isMultiPage ? totalPages : 1;
       
       if (isMultiPage) {
-        // Multi-page: create ZIP with all pages
+        // Multi-page: export each page and create ZIP
         const zip = new JSZip();
+        const originalPage = currentPage;
         
-        for (let pageNum = 1; pageNum <= pagesToExport; pageNum++) {
-          const canvasDiv = document.getElementById(`canvas-page-${pageNum}`);
-          if (!canvasDiv) continue;
+        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+          setCurrentPage(pageNum);
           
-          // Temporarily show the page if hidden
-          const wasHidden = canvasDiv.style.display === 'none';
-          if (wasHidden) canvasDiv.style.display = 'block';
+          // Wait for re-render
+          await new Promise(resolve => setTimeout(resolve, 500));
           
-          const canvas = await html2canvas(canvasDiv, {
+          if (!canvasRef.current) continue;
+          
+          const canvas = await html2canvas(canvasRef.current, {
             backgroundColor: '#ffffff',
             scale: 2,
+            allowTaint: true,
+            useCORS: true,
           });
-          
-          if (wasHidden) canvasDiv.style.display = 'none';
           
           const blob = await new Promise<Blob>((resolve) => {
             canvas.toBlob((b) => resolve(b!), 'image/png');
@@ -739,6 +739,9 @@ export default function CampaignEditorPage() {
           zip.file(`page-${pageNum}.png`, blob);
         }
         
+        // Restore original page
+        setCurrentPage(originalPage);
+        
         const zipBlob = await zip.generateAsync({ type: 'blob' });
         const url = URL.createObjectURL(zipBlob);
         const link = document.createElement('a');
@@ -746,10 +749,14 @@ export default function CampaignEditorPage() {
         link.download = `${campaignName || 'campaign'}-pages.zip`;
         link.click();
         URL.revokeObjectURL(url);
+        
+        toast({
+          title: t("common.success"),
+          description: "Campaign pages exported as ZIP",
+        });
       } else {
         // Single page: export as PNG
-        const canvasDiv = document.getElementById('canvas-page-1');
-        if (!canvasDiv) {
+        if (!canvasRef.current) {
           toast({
             title: t("common.error"),
             description: "Canvas not found",
@@ -758,9 +765,11 @@ export default function CampaignEditorPage() {
           return;
         }
         
-        const canvas = await html2canvas(canvasDiv, {
+        const canvas = await html2canvas(canvasRef.current, {
           backgroundColor: '#ffffff',
           scale: 2,
+          allowTaint: true,
+          useCORS: true,
         });
         
         const blob = await new Promise<Blob>((resolve) => {
@@ -773,12 +782,12 @@ export default function CampaignEditorPage() {
         link.download = `${campaignName || 'campaign'}.png`;
         link.click();
         URL.revokeObjectURL(url);
+        
+        toast({
+          title: t("common.success"),
+          description: "Campaign exported as PNG",
+        });
       }
-      
-      toast({
-        title: t("common.success"),
-        description: isMultiPage ? "Campaign pages exported as ZIP" : "Campaign exported as PNG",
-      });
     } catch (error) {
       console.error("Export failed:", error);
       toast({

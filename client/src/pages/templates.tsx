@@ -183,6 +183,10 @@ export default function TemplatesPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setLocation(`/templates/${template.id}/edit`)}>
                             <Pencil className="mr-2 h-4 w-4" />
+                            Edit Canvas
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setLocation(`/templates/${template.id}/setup`)}>
+                            <Pencil className="mr-2 h-4 w-4" />
                             {t("common.edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem>
