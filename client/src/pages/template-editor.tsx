@@ -1744,25 +1744,31 @@ export default function TemplateEditorPage() {
             <div className="p-4 space-y-4">
               <div>
                 <Label className="text-xs">{t("templates.templateType")}</Label>
-                <Select value={templateType} onValueChange={(v) => setTemplateType(v as "single_page" | "multi_page")}>
-                  <SelectTrigger className="mt-1" data-testid="select-template-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single_page">
-                      <div className="flex flex-col">
-                        <span>{t("templates.singlePage")}</span>
-                        <span className="text-xs text-muted-foreground">{t("templates.singlePageDesc")}</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="multi_page">
-                      <div className="flex flex-col">
-                        <span>{t("templates.multiPage")}</span>
-                        <span className="text-xs text-muted-foreground">{t("templates.multiPageDesc")}</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                {id && id !== "new" ? (
+                  <div className="mt-1 p-2 bg-muted rounded text-sm">
+                    {templateType === "single_page" ? t("templates.singlePage") : t("templates.multiPage")}
+                  </div>
+                ) : (
+                  <Select value={templateType} onValueChange={(v) => setTemplateType(v as "single_page" | "multi_page")}>
+                    <SelectTrigger className="mt-1" data-testid="select-template-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single_page">
+                        <div className="flex flex-col">
+                          <span>{t("templates.singlePage")}</span>
+                          <span className="text-xs text-muted-foreground">{t("templates.singlePageDesc")}</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="multi_page">
+                        <div className="flex flex-col">
+                          <span>{t("templates.multiPage")}</span>
+                          <span className="text-xs text-muted-foreground">{t("templates.multiPageDesc")}</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label className="text-xs">{t("editor.canvasSize")}</Label>

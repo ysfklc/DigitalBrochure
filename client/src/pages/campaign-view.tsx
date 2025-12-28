@@ -112,13 +112,13 @@ export default function CampaignViewPage() {
   const [footerHeight, setFooterHeight] = useState(60);
 
   const { data: campaign, isLoading } = useQuery<Campaign>({
-    queryKey: [`/api/campaigns/${id}`],
+    queryKey: [`/api/public/campaigns/${id}`],
     enabled: !!id,
   });
 
   // Fetch template for background image
   const { data: template } = useQuery<any>({
-    queryKey: [`/api/templates/${campaign?.templateId}`],
+    queryKey: [`/api/public/templates/${campaign?.templateId}`],
     enabled: !!campaign?.templateId,
   });
 

@@ -944,6 +944,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/public/templates/:id", async (req: Request, res: Response) => {
+    try {
+      const template = await storage.getTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get template" });
+    }
+  });
+
   app.post("/api/templates", authenticate, requireTenant, async (req: AuthRequest, res: Response) => {
     try {
       const templateData = { ...req.body, tenantId: req.user!.tenantId };
@@ -994,6 +1006,8 @@ export async function registerRoutes(
         discountedPriceConfig,
         unitOfMeasureConfig,
         dateTextConfig,
+        coverPageConfig,
+        backgroundColor,
       } = req.body;
 
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
@@ -1008,6 +1022,8 @@ export async function registerRoutes(
       if (discountedPriceConfig) updateData.discountedPriceConfig = typeof discountedPriceConfig === 'string' ? JSON.parse(discountedPriceConfig) : discountedPriceConfig;
       if (unitOfMeasureConfig) updateData.unitOfMeasureConfig = typeof unitOfMeasureConfig === 'string' ? JSON.parse(unitOfMeasureConfig) : unitOfMeasureConfig;
       if (dateTextConfig) updateData.dateTextConfig = typeof dateTextConfig === 'string' ? JSON.parse(dateTextConfig) : dateTextConfig;
+      if (coverPageConfig) updateData.coverPageConfig = typeof coverPageConfig === 'string' ? JSON.parse(coverPageConfig) : coverPageConfig;
+      if (backgroundColor) updateData.backgroundColor = backgroundColor;
 
       // Handle image updates
       if (files?.backgroundImage?.[0]) {
@@ -1205,6 +1221,18 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete campaign" });
+    }
+  });
+
+  app.get("/api/public/campaigns/:id", async (req: Request, res: Response) => {
+    try {
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      res.json(campaign);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get campaign" });
     }
   });
 
