@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
+import html2canvas from "html2canvas";
+import JSZip from "jszip";
 import { 
   Save, 
   Undo, 
@@ -36,7 +38,8 @@ import {
   Palette,
   PanelTop,
   PanelBottom,
-  Calendar
+  Calendar,
+  Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,35 +185,42 @@ interface DateElementData {
 }
 
 // Helper function to format date according to template format
-const formatCampaignDate = (date: Date | string | null | undefined, format: string): string => {
-  if (!date) return format; // Return format as placeholder if no date
+const formatCampaignDate = (startDate: Date | string | null | undefined, endDate: Date | string | null | undefined, format: string): string => {
+  const formatSingleDate = (date: Date | string | null | undefined): string => {
+    if (!date) return format;
+    
+    const d = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(d.getTime())) return format;
+    
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear().toString();
+    
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    switch (format) {
+      case 'DD/MM/YYYY':
+        return `${day}/${month}/${year}`;
+      case 'MM/DD/YYYY':
+        return `${month}/${day}/${year}`;
+      case 'YYYY-MM-DD':
+        return `${year}-${month}-${day}`;
+      case 'DD.MM.YYYY':
+        return `${day}.${month}.${year}`;
+      case 'DD MMM YYYY':
+        return `${day} ${monthNames[d.getMonth()]} ${year}`;
+      case 'MMMM DD, YYYY':
+        return `${monthNamesFull[d.getMonth()]} ${day}, ${year}`;
+      default:
+        return `${day}/${month}/${year}`;
+    }
+  };
+
+  const startStr = formatSingleDate(startDate);
+  const endStr = formatSingleDate(endDate);
   
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) return format;
-  
-  const day = d.getDate().toString().padStart(2, '0');
-  const month = (d.getMonth() + 1).toString().padStart(2, '0');
-  const year = d.getFullYear().toString();
-  
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthNamesFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  
-  switch (format) {
-    case 'DD/MM/YYYY':
-      return `${day}/${month}/${year}`;
-    case 'MM/DD/YYYY':
-      return `${month}/${day}/${year}`;
-    case 'YYYY-MM-DD':
-      return `${year}-${month}-${day}`;
-    case 'DD.MM.YYYY':
-      return `${day}.${month}.${year}`;
-    case 'DD MMM YYYY':
-      return `${day} ${monthNames[d.getMonth()]} ${year}`;
-    case 'MMMM DD, YYYY':
-      return `${monthNamesFull[d.getMonth()]} ${day}, ${year}`;
-    default:
-      return `${day}/${month}/${year}`;
-  }
+  return startStr && endStr ? `${startStr}–${endStr}` : startStr || endStr || format;
 };
 
 export default function CampaignEditorPage() {
@@ -375,6 +385,15 @@ export default function CampaignEditorPage() {
 
   const { data: campaign, isLoading: loadingCampaign } = useQuery<Campaign>({
     queryKey: [`/api/campaigns/${id}`],
+    queryFn: async () => {
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(`/api/campaigns/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch campaign");
+      return res.json();
+    },
     enabled: !!id && id !== "new",
   });
 
@@ -688,6 +707,87 @@ export default function CampaignEditorPage() {
   const handleRedo = () => console.log("Redo");
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 10, 200));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 10, 25));
+
+  const handleExportPNG = async () => {
+    try {
+      const isMultiPage = campaign?.type === 'multi_page' || totalPages > 1;
+      const pagesToExport = isMultiPage ? totalPages : 1;
+      
+      if (isMultiPage) {
+        // Multi-page: create ZIP with all pages
+        const zip = new JSZip();
+        
+        for (let pageNum = 1; pageNum <= pagesToExport; pageNum++) {
+          const canvasDiv = document.getElementById(`canvas-page-${pageNum}`);
+          if (!canvasDiv) continue;
+          
+          // Temporarily show the page if hidden
+          const wasHidden = canvasDiv.style.display === 'none';
+          if (wasHidden) canvasDiv.style.display = 'block';
+          
+          const canvas = await html2canvas(canvasDiv, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+          });
+          
+          if (wasHidden) canvasDiv.style.display = 'none';
+          
+          const blob = await new Promise<Blob>((resolve) => {
+            canvas.toBlob((b) => resolve(b!), 'image/png');
+          });
+          
+          zip.file(`page-${pageNum}.png`, blob);
+        }
+        
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${campaignName || 'campaign'}-pages.zip`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Single page: export as PNG
+        const canvasDiv = document.getElementById('canvas-page-1');
+        if (!canvasDiv) {
+          toast({
+            title: t("common.error"),
+            description: "Canvas not found",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        const canvas = await html2canvas(canvasDiv, {
+          backgroundColor: '#ffffff',
+          scale: 2,
+        });
+        
+        const blob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b!), 'image/png');
+        });
+        
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${campaignName || 'campaign'}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+      
+      toast({
+        title: t("common.success"),
+        description: isMultiPage ? "Campaign pages exported as ZIP" : "Campaign exported as PNG",
+      });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({
+        title: t("common.error"),
+        description: "Failed to export campaign",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAddPage = () => {
     setTotalPages((prev) => prev + 1);
@@ -1182,15 +1282,52 @@ export default function CampaignEditorPage() {
       const unit = element.data.unit || element.data.product?.unit || productData.unit || 'each';
       const isProcessing = processingElementId === element.id;
       
-      // Get price styling from template
+      // Get styling from template
+      const productTitleConfig = selectedTemplate?.productTitleConfig as any || {};
       const priceConfig = selectedTemplate?.discountedPriceConfig as any || {};
       const labelTextConfig = selectedTemplate?.labelTextConfig as any || {};
       const unitConfig = selectedTemplate?.unitOfMeasureConfig as any || {};
       const labelImageUrl = selectedTemplate?.labelImageUrl;
       
-      // Calculate price label dimensions - 1/6 of product size, positioned at bottom-right
+      // Calculate price label dimensions - 1/6 of product size
       const labelWidth = Math.max(element.width / 6, 50);
       const labelHeight = Math.max(element.height / 6, 40);
+      const labelPosition = element.data.labelPosition || 'bottom-right';
+      const titlePosition = element.data.titlePosition || 'top-left';
+      
+      // Calculate label position based on labelPosition property
+      const getLabelPositionStyle = () => {
+        const baseStyle = { width: `${labelWidth}px`, height: `${labelHeight}px` };
+        switch (labelPosition) {
+          case 'bottom-left':
+            return { ...baseStyle, bottom: 0, left: 0 };
+          case 'bottom-right':
+            return { ...baseStyle, bottom: 0, right: 0 };
+          case 'top-left':
+            return { ...baseStyle, top: 0, left: 0 };
+          case 'top-right':
+            return { ...baseStyle, top: 0, right: 0 };
+          default:
+            return { ...baseStyle, bottom: 0, right: 0 };
+        }
+      };
+
+      // Calculate title position based on titlePosition property
+      const getTitlePositionStyle = () => {
+        const baseStyle = { maxWidth: '70%', padding: '4px 8px', borderRadius: '4px' };
+        switch (titlePosition) {
+          case 'bottom-left':
+            return { ...baseStyle, bottom: 4, left: 4 };
+          case 'bottom-right':
+            return { ...baseStyle, bottom: 4, right: 4 };
+          case 'top-left':
+            return { ...baseStyle, top: 4, left: 4 };
+          case 'top-right':
+            return { ...baseStyle, top: 4, right: 4 };
+          default:
+            return { ...baseStyle, top: 4, left: 4 };
+        }
+      };
       
       return (
         <div className="w-full h-full relative group">
@@ -1250,6 +1387,94 @@ export default function CampaignEditorPage() {
                         ))}
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <AlignLeft className="h-4 w-4 mr-2" />
+                        Price Label Position
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('labelPosition', 'top-left');
+                          }}
+                          data-testid={`button-label-position-top-left-${element.id}`}
+                        >
+                          Top Left
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('labelPosition', 'top-right');
+                          }}
+                          data-testid={`button-label-position-top-right-${element.id}`}
+                        >
+                          Top Right
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('labelPosition', 'bottom-left');
+                          }}
+                          data-testid={`button-label-position-bottom-left-${element.id}`}
+                        >
+                          Bottom Left
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('labelPosition', 'bottom-right');
+                          }}
+                          data-testid={`button-label-position-bottom-right-${element.id}`}
+                        >
+                          Bottom Right
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <AlignLeft className="h-4 w-4 mr-2" />
+                        Title Position
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('titlePosition', 'top-left');
+                          }}
+                          data-testid={`button-title-position-top-left-${element.id}`}
+                        >
+                          Top Left
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('titlePosition', 'top-right');
+                          }}
+                          data-testid={`button-title-position-top-right-${element.id}`}
+                        >
+                          Top Right
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('titlePosition', 'bottom-left');
+                          }}
+                          data-testid={`button-title-position-bottom-left-${element.id}`}
+                        >
+                          Bottom Left
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateElementData('titlePosition', 'bottom-right');
+                          }}
+                          data-testid={`button-title-position-bottom-right-${element.id}`}
+                        >
+                          Bottom Right
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -1271,15 +1496,12 @@ export default function CampaignEditorPage() {
             )}
           </div>
           
-          {/* Price Label - Positioned at bottom-right corner */}
+          {/* Price Label - Positioned dynamically */}
           {(price || discountPrice) && (
             <div 
               className="absolute flex items-center justify-center rounded-sm overflow-hidden"
               style={{ 
-                right: 0,
-                bottom: 0,
-                width: `${labelWidth}px`,
-                height: `${labelHeight}px`,
+                ...getLabelPositionStyle(),
                 backgroundImage: labelImageUrl ? `url(${labelImageUrl})` : 'none',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
@@ -1324,6 +1546,33 @@ export default function CampaignEditorPage() {
                   /{unit}
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* Product Title - Positioned dynamically */}
+          {name && (
+            <div
+              className="absolute z-5"
+              style={{
+                ...getTitlePositionStyle(),
+                backgroundColor: productTitleConfig.backgroundColor || 'rgba(0, 0, 0, 0.6)',
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: productTitleConfig.fontFamily || 'Inter',
+                  fontSize: `${Math.max((productTitleConfig.fontSize || 10) * scale, 8)}px`,
+                  fontWeight: productTitleConfig.fontWeight || 'semibold',
+                  fontStyle: productTitleConfig.fontStyle || 'normal',
+                  color: productTitleConfig.color || '#ffffff',
+                  lineHeight: '1.3',
+                  margin: 0,
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
+                }}
+              >
+                {name}
+              </p>
             </div>
           )}
         </div>
@@ -1429,12 +1678,11 @@ export default function CampaignEditorPage() {
 
     if (element.type === 'date') {
       const dateData = element.data as DateElementData;
-      // Use campaign dates - show start date by default, can be extended to support end date
-      const displayDate = formatCampaignDate(campaign?.startDate, dateData.format);
+      const displayDate = formatCampaignDate(campaign?.startDate, campaign?.endDate, dateData.format);
       
       return (
         <div
-          className="w-full h-full flex items-center overflow-hidden"
+          className="w-full h-full flex items-center justify-center overflow-hidden"
           style={{
             fontFamily: dateData.fontFamily,
             fontSize: `${dateData.fontSize * scale}px`,
@@ -1443,9 +1691,10 @@ export default function CampaignEditorPage() {
             textAlign: dateData.textAlign,
             color: dateData.color,
             backgroundColor: dateData.backgroundColor === 'transparent' ? 'transparent' : dateData.backgroundColor,
+            padding: '4px',
           }}
         >
-          <span className="w-full px-1" style={{ textAlign: dateData.textAlign }}>
+          <span style={{ textAlign: dateData.textAlign, wordBreak: 'break-word' }}>
             {displayDate}
           </span>
         </div>
@@ -1541,6 +1790,10 @@ export default function CampaignEditorPage() {
           <Button variant="outline" onClick={handlePreview} data-testid="button-preview">
             <Eye className="h-4 w-4 mr-2" />
             {t("editor.preview")}
+          </Button>
+          <Button variant="outline" onClick={handleExportPNG} data-testid="button-export-png">
+            <Download className="h-4 w-4 mr-2" />
+            Export PNG
           </Button>
           <Button onClick={handleSave} data-testid="button-save">
             <Save className="h-4 w-4 mr-2" />
@@ -2135,6 +2388,40 @@ export default function CampaignEditorPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div>
+                      <Label className="text-xs">Price Label Position</Label>
+                      <Select
+                        value={selectedElementData.data.labelPosition || 'bottom-right'}
+                        onValueChange={(v) => updateElementData('labelPosition', v)}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-label-position">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="top-left">Top Left</SelectItem>
+                          <SelectItem value="top-right">Top Right</SelectItem>
+                          <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                          <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Title Position</Label>
+                      <Select
+                        value={selectedElementData.data.titlePosition || 'top-left'}
+                        onValueChange={(v) => updateElementData('titlePosition', v)}
+                      >
+                        <SelectTrigger className="mt-1" data-testid="select-title-position">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="top-left">Top Left</SelectItem>
+                          <SelectItem value="top-right">Top Right</SelectItem>
+                          <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                          <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
 
@@ -2400,7 +2687,126 @@ export default function CampaignEditorPage() {
                 </div>
               </div>
             </ScrollArea>
-          ) : (
+          ) : null}
+
+          {selectedElement && selectedElementData?.type === 'date' && (
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-4">
+                <div>
+                  <Label className="text-xs font-medium mb-2">{t("editor.fontFamily")}</Label>
+                  <Select value={selectedElementData.data.fontFamily} onValueChange={(v) => updateElementData('fontFamily', v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FONT_FAMILIES.map((font) => (
+                        <SelectItem key={font.value} value={font.value}>
+                          {font.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-medium mb-2">{t("editor.fontSize")}</Label>
+                  <Select value={selectedElementData.data.fontSize?.toString()} onValueChange={(v) => updateElementData('fontSize', parseInt(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FONT_SIZES.map((size) => (
+                        <SelectItem key={size} value={size.toString()}>
+                          {size}px
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-medium mb-2">{t("editor.textColor")}</Label>
+                  <div className="flex gap-2">
+                    <div
+                      className="w-8 h-8 rounded border cursor-pointer"
+                      style={{ backgroundColor: selectedElementData.data.color }}
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'color';
+                        input.value = selectedElementData.data.color;
+                        input.onchange = (e) => updateElementData('color', (e.target as HTMLInputElement).value);
+                        input.click();
+                      }}
+                    />
+                    <Input
+                      type="text"
+                      value={selectedElementData.data.color}
+                      onChange={(e) => updateElementData('color', e.target.value)}
+                      className="h-8 flex-1"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-medium mb-2">Font Weight</Label>
+                  <Select value={selectedElementData.data.fontWeight} onValueChange={(v) => updateElementData('fontWeight', v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="bold">Bold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-medium mb-2">Font Style</Label>
+                  <Select value={selectedElementData.data.fontStyle} onValueChange={(v) => updateElementData('fontStyle', v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="italic">Italic</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-medium mb-2">{t("editor.textAlign")}</Label>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant={selectedElementData.data.textAlign === 'left' ? 'default' : 'outline'}
+                      onClick={() => updateElementData('textAlign', 'left')}
+                      className="flex-1"
+                    >
+                      <AlignLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={selectedElementData.data.textAlign === 'center' ? 'default' : 'outline'}
+                      onClick={() => updateElementData('textAlign', 'center')}
+                      className="flex-1"
+                    >
+                      <AlignCenter className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={selectedElementData.data.textAlign === 'right' ? 'default' : 'outline'}
+                      onClick={() => updateElementData('textAlign', 'right')}
+                      className="flex-1"
+                    >
+                      <AlignRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+
+          {!selectedElement && (
             <div className="p-4 text-center text-muted-foreground">
               <Settings className="h-8 w-8 mx-auto mb-2" />
               <p className="text-sm">{t("editor.selectElementHelp")}</p>

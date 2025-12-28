@@ -460,10 +460,14 @@ export default function CampaignWizardPage() {
           const existingCampaign = await apiRequest("GET", `/api/campaigns/${campaign.id}`) as any;
           const existingCanvasData = existingCampaign?.canvasData || {};
           
+          // Preserve existing date and template elements, add product elements
+          const existingDateElements = (existingCanvasData.elements || []).filter((el: any) => el.type === 'date');
+          const mergedElements = [...existingDateElements, ...canvasElements];
+          
           await apiRequest("PATCH", `/api/campaigns/${campaign.id}`, {
             canvasData: {
               ...existingCanvasData,
-              elements: canvasElements,
+              elements: mergedElements,
               totalPages: Math.ceil(selectedProducts.length / (productsPerPage || 4)),
             },
           });
