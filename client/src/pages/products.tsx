@@ -16,16 +16,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { UNIT_OPTIONS } from "@/lib/constants";
 import type { Product } from "@shared/schema";
 
 const productSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
-  category: z.string().optional(),
   price: z.string().min(1, "Price is required"),
   discountPrice: z.string().optional(),
   discountPercentage: z.string().optional(),
-  sku: z.string().optional(),
+  unit: z.string().optional(),
   imageUrl: z.string().optional(),
 });
 
@@ -85,12 +84,10 @@ export default function ProductsPage() {
     resolver: zodResolver(productSchema),
     defaultValues: {
       name: "",
-      description: "",
-      category: "",
       price: "",
       discountPrice: "",
       discountPercentage: "",
-      sku: "",
+      unit: "",
       imageUrl: "",
     },
   });
@@ -155,12 +152,10 @@ export default function ProductsPage() {
     setEditingProduct(product);
     form.reset({
       name: product.name,
-      description: product.description || "",
-      category: product.category || "",
       price: product.price,
       discountPrice: product.discountPrice || "",
       discountPercentage: product.discountPercentage?.toString() || "",
-      sku: product.sku || "",
+      unit: product.unit || "",
       imageUrl: product.imageUrl || "",
     });
     setIsDialogOpen(true);
@@ -172,7 +167,7 @@ export default function ProductsPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const categories = [...new Set(products?.map((p) => p.category).filter(Boolean))];
+  const categories = Array.from(new Set(products?.map((p) => p.category).filter(Boolean) ?? []));
 
   return (
     <div className="p-6 space-y-6">
@@ -218,19 +213,6 @@ export default function ProductsPage() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("products.description")}</FormLabel>
-                      <FormControl>
-                        <Input {...field} data-testid="input-product-description" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -259,34 +241,28 @@ export default function ProductsPage() {
                     )}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("products.category")}</FormLabel>
+                <FormField
+                  control={form.control}
+                  name="unit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("products.unit")}</FormLabel>
+                      <Select value={field.value || ""} onValueChange={field.onChange}>
                         <FormControl>
-                          <Input {...field} data-testid="input-product-category" />
+                          <SelectTrigger data-testid="select-product-unit">
+                            <SelectValue placeholder="Select a unit" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="sku"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("products.sku")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} data-testid="input-product-sku" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                        <SelectContent>
+                          {UNIT_OPTIONS.map((unit) => (
+                            <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="imageUrl"

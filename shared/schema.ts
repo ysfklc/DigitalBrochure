@@ -74,6 +74,7 @@ export const products = pgTable("products", {
   discountPercentage: integer("discount_percentage"),
   imageUrl: text("image_url"),
   sku: text("sku"),
+  unit: text("unit"),
   isGlobal: boolean("is_global").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -207,6 +208,7 @@ export const productConnectors = pgTable("product_connectors", {
   requestBody: text("request_body"),
   responseParser: text("response_parser").notNull(),
   fieldMappings: jsonb("field_mappings").notNull(),
+  excludeFilters: jsonb("exclude_filters").default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

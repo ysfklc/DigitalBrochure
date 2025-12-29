@@ -2061,7 +2061,7 @@ export async function registerRoutes(
 }
 
 async function executeConnectorSearch(connector: any, searchQuery: string): Promise<any[]> {
-  const { requestMethod, requestUrl, requestHeaders, requestParams, requestBody, responseParser, fieldMappings } = connector;
+  const { requestMethod, requestUrl, requestHeaders, requestParams, requestBody, responseParser, fieldMappings, excludeFilters } = connector;
   
   console.log("[DEBUG] executeConnectorSearch called with searchQuery:", searchQuery);
   console.log("[DEBUG] Connector config:", { requestMethod, requestUrl, requestParams, responseParser, fieldMappings });
@@ -2153,12 +2153,54 @@ async function executeConnectorSearch(connector: any, searchQuery: string): Prom
     from: string;
     to: string;
   }
+  interface FilterRule {
+    field: string;
+    operator: "equals" | "startsWith" | "isEmpty" | "contains" | "endsWith";
+    value: string;
+  }
   const mappings = fieldMappings as { 
     name: string; 
     image: string; 
     price?: string; 
     unit?: string; 
     unitMappings?: UnitMapping[]; 
+  };
+  
+  // Function to check if a product should be excluded based on filters
+  const shouldExcludeProduct = (item: any): boolean => {
+    if (!excludeFilters || excludeFilters.length === 0) return false;
+    
+    for (const filter of excludeFilters) {
+      let fieldValue = "";
+      
+      // Map filter field to actual product field path
+      if (filter.field === "name") {
+        fieldValue = getValueByPath(item, mappings.name || "") || "";
+      } else if (filter.field === "imageUrl") {
+        fieldValue = getValueByPath(item, mappings.image || "") || "";
+      } else if (filter.field === "price") {
+        fieldValue = getValueByPath(item, mappings.price || "") || "";
+      }
+      
+      // Check the filter condition
+      let matches = false;
+      if (filter.operator === "isEmpty") {
+        matches = !fieldValue || fieldValue.toString().trim() === "";
+      } else if (filter.operator === "equals") {
+        matches = fieldValue?.toString() === filter.value;
+      } else if (filter.operator === "startsWith") {
+        matches = fieldValue?.toString().startsWith(filter.value) || false;
+      } else if (filter.operator === "contains") {
+        matches = fieldValue?.toString().includes(filter.value) || false;
+      } else if (filter.operator === "endsWith") {
+        matches = fieldValue?.toString().endsWith(filter.value) || false;
+      }
+      
+      // If any filter matches, exclude this product
+      if (matches) return true;
+    }
+    
+    return false;
   };
   
   // Function to apply unit mappings
@@ -2189,17 +2231,20 @@ async function executeConnectorSearch(connector: any, searchQuery: string): Prom
     return rawUnit || "Adet"; // Return as-is or default
   };
   
-  return products.map((item: any) => {
-    const rawUnit = getValueByPath(item, mappings.unit || "") || "";
-    return {
-      id: `external-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: getValueByPath(item, mappings.name || "") || "Unknown Product",
-      imageUrl: getValueByPath(item, mappings.image || "") || "",
-      price: getValueByPath(item, mappings.price || "") || "0",
-      unit: applyUnitMapping(rawUnit),
-      isExternal: true,
-    };
-  });
+  // Filter products based on exclude filters and map fields
+  return products
+    .filter((item: any) => !shouldExcludeProduct(item))
+    .map((item: any) => {
+      const rawUnit = getValueByPath(item, mappings.unit || "") || "";
+      return {
+        id: `external-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: getValueByPath(item, mappings.name || "") || "Unknown Product",
+        imageUrl: getValueByPath(item, mappings.image || "") || "",
+        price: getValueByPath(item, mappings.price || "") || "0",
+        unit: applyUnitMapping(rawUnit),
+        isExternal: true,
+      };
+    });
 }
 
 function parseJsonPath(data: any, path: string): any {

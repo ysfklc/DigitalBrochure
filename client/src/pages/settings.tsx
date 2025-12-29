@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CreditCard, Database, RefreshCw, Eye, EyeOff, Mail, Send, Plus, Trash2, Edit, Link, TestTube, Lightbulb, Clock, CheckCircle, CheckCheck, ArrowRight } from "lucide-react";
 import { useRoleVerification } from "@/lib/use-role-verification";
+import { UNIT_OPTIONS } from "@/lib/constants";
 import type { ProductConnector, Suggestion } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 
@@ -54,6 +55,12 @@ interface UnitMapping {
   to: string;
 }
 
+interface FilterRule {
+  field: string;
+  operator: "equals" | "startsWith" | "isEmpty" | "contains" | "endsWith";
+  value: string;
+}
+
 interface FieldMappings {
   name: string;
   image: string;
@@ -61,12 +68,6 @@ interface FieldMappings {
   unit?: string;
   unitMappings?: UnitMapping[];
 }
-
-const UNIT_OPTIONS = [
-  "g", "kg", "ml", "l", "Adet", "Demet", "Paket", "Kasa", "Karton", 
-  "Rulo", "Poşet", "Tabak", "Bardak", "Çuval", "Konserve kutusu", 
-  "Şişe", "Bidon", "Çift", "Dilim", "Porsiyon", "Kova", "File"
-];
 
 interface ConnectorFormData {
   name: string;
@@ -79,6 +80,7 @@ interface ConnectorFormData {
   requestBody: string;
   responseParser: string;
   fieldMappings: FieldMappings;
+  excludeFilters?: FilterRule[];
 }
 
 const emptyConnectorForm: ConnectorFormData = {
@@ -92,6 +94,7 @@ const emptyConnectorForm: ConnectorFormData = {
   requestBody: "",
   responseParser: "$.data",
   fieldMappings: { name: "name", image: "imageUrl", price: "price", unit: "unit", unitMappings: [] },
+  excludeFilters: [],
 };
 
 export default function SettingsPage() {
@@ -343,6 +346,7 @@ export default function SettingsPage() {
         requestBody: connector.requestBody || "",
         responseParser: connector.responseParser,
         fieldMappings: (connector.fieldMappings as FieldMappings) || { name: "", image: "" },
+        excludeFilters: (connector.excludeFilters as FilterRule[]) || [],
       });
     } else {
       setEditingConnector(null);
@@ -1034,7 +1038,7 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 border-t pt-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <Label>{t("settings.unitMappings")}</Label>
@@ -1114,6 +1118,92 @@ export default function SettingsPage() {
                   ))}
                   {(!connectorForm.fieldMappings.unitMappings || connectorForm.fieldMappings.unitMappings.length === 0) && (
                     <p className="text-xs text-muted-foreground italic">{t("settings.noUnitMappings")}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Exclude Products</Label>
+                    <p className="text-xs text-muted-foreground">Filter out products based on specific conditions</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConnectorForm({
+                      ...connectorForm,
+                      excludeFilters: [...(connectorForm.excludeFilters || []), { field: "name", operator: "isEmpty", value: "" }]
+                    })}
+                    data-testid="button-add-exclude-filter"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("common.add")}
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {(connectorForm.excludeFilters || []).map((filter, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Select value={filter.field} onValueChange={(value) => {
+                        const newFilters = [...(connectorForm.excludeFilters || [])];
+                        newFilters[index] = { ...newFilters[index], field: value };
+                        setConnectorForm({ ...connectorForm, excludeFilters: newFilters });
+                      }}>
+                        <SelectTrigger className="w-[120px]" data-testid={`select-filter-field-${index}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="imageUrl">Image URL</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={filter.operator} onValueChange={(value: any) => {
+                        const newFilters = [...(connectorForm.excludeFilters || [])];
+                        newFilters[index] = { ...newFilters[index], operator: value };
+                        setConnectorForm({ ...connectorForm, excludeFilters: newFilters });
+                      }}>
+                        <SelectTrigger className="w-[130px]" data-testid={`select-filter-operator-${index}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="isEmpty">Is empty</SelectItem>
+                          <SelectItem value="equals">Equals</SelectItem>
+                          <SelectItem value="startsWith">Starts with</SelectItem>
+                          <SelectItem value="contains">Contains</SelectItem>
+                          <SelectItem value="endsWith">Ends with</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {filter.operator !== "isEmpty" && (
+                        <Input
+                          value={filter.value}
+                          onChange={(e) => {
+                            const newFilters = [...(connectorForm.excludeFilters || [])];
+                            newFilters[index] = { ...newFilters[index], value: e.target.value };
+                            setConnectorForm({ ...connectorForm, excludeFilters: newFilters });
+                          }}
+                          placeholder="Value"
+                          className="flex-1"
+                          data-testid={`input-filter-value-${index}`}
+                        />
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newFilters = (connectorForm.excludeFilters || []).filter((_, i) => i !== index);
+                          setConnectorForm({ ...connectorForm, excludeFilters: newFilters });
+                        }}
+                        data-testid={`button-remove-exclude-filter-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {(!connectorForm.excludeFilters || connectorForm.excludeFilters.length === 0) && (
+                    <p className="text-xs text-muted-foreground italic">No filters configured</p>
                   )}
                 </div>
               </div>
