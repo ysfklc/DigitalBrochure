@@ -727,12 +727,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "sku": {
-          "name": "sku",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "unit": {
           "name": "unit",
           "type": "text",

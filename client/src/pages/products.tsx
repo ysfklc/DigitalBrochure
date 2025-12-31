@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,11 +22,12 @@ import type { Product } from "@shared/schema";
 
 const productSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  price: z.string().min(1, "Price is required"),
+  price: z.string().optional(),
   discountPrice: z.string().optional(),
   discountPercentage: z.string().optional(),
   unit: z.string().optional(),
   imageUrl: z.string().optional(),
+  removeBackground: z.boolean().default(true),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -40,6 +42,7 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const [removeBackground, setRemoveBackground] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,6 +52,9 @@ export default function ProductsPage() {
     setIsUploading(true);
     const formData = new FormData();
     formData.append("file", file);
+    if (removeBackground) {
+      formData.append("removeBackground", "true");
+    }
 
     try {
       const token = localStorage.getItem("authToken");
@@ -65,6 +71,39 @@ export default function ProductsPage() {
       toast({ title: t("common.success"), description: "Image uploaded successfully" });
     } catch (error) {
       toast({ variant: "destructive", title: t("common.error"), description: "Failed to upload image" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleProcessUrl = async () => {
+    const imageUrl = form.getValues("imageUrl");
+    if (!imageUrl || imageUrl.startsWith('/uploads/')) {
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch("/api/upload-from-url", {
+        method: "POST",
+        body: JSON.stringify({
+          imageUrl,
+          removeBackground,
+        }),
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) throw new Error("Processing failed");
+      const data = await response.json();
+      form.setValue("imageUrl", data.url);
+      setUploadPreview(data.url);
+      toast({ title: t("common.success"), description: "Image processed and converted to PNG" });
+    } catch (error) {
+      toast({ variant: "destructive", title: t("common.error"), description: "Failed to process image" });
     } finally {
       setIsUploading(false);
     }
@@ -89,6 +128,7 @@ export default function ProductsPage() {
       discountPercentage: "",
       unit: "",
       imageUrl: "",
+      removeBackground: true,
     },
   });
 
@@ -96,7 +136,7 @@ export default function ProductsPage() {
     mutationFn: async (data: ProductFormValues) => {
       return apiRequest("POST", "/api/products", {
         ...data,
-        price: data.price,
+        price: data.price || null,
         discountPrice: data.discountPrice || null,
         discountPercentage: data.discountPercentage ? parseInt(data.discountPercentage) : null,
       });
@@ -105,6 +145,9 @@ export default function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setIsDialogOpen(false);
       form.reset();
+      setUploadPreview(null);
+      setRemoveBackground(true);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       toast({ title: t("common.success"), description: "Product created successfully" });
     },
     onError: () => {
@@ -116,7 +159,7 @@ export default function ProductsPage() {
     mutationFn: async ({ id, data }: { id: string; data: ProductFormValues }) => {
       return apiRequest("PATCH", `/api/products/${id}`, {
         ...data,
-        price: data.price,
+        price: data.price || null,
         discountPrice: data.discountPrice || null,
         discountPercentage: data.discountPercentage ? parseInt(data.discountPercentage) : null,
       });
@@ -126,6 +169,9 @@ export default function ProductsPage() {
       setIsDialogOpen(false);
       setEditingProduct(null);
       form.reset();
+      setUploadPreview(null);
+      setRemoveBackground(true);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       toast({ title: t("common.success"), description: "Product updated successfully" });
     },
   });
@@ -152,7 +198,7 @@ export default function ProductsPage() {
     setEditingProduct(product);
     form.reset({
       name: product.name,
-      price: product.price,
+      price: product.price || undefined,
       discountPrice: product.discountPrice || "",
       discountPercentage: product.discountPercentage?.toString() || "",
       unit: product.unit || "",
@@ -291,6 +337,19 @@ export default function ProductsPage() {
                             {isUploading ? "Uploading..." : "Upload Image"}
                           </Button>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox 
+                            checked={removeBackground}
+                            onCheckedChange={(checked) => {
+                              setRemoveBackground(checked as boolean);
+                              form.setValue("removeBackground", checked as boolean);
+                            }}
+                            data-testid="checkbox-remove-background"
+                          />
+                          <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                            Remove image background
+                          </label>
+                        </div>
                         {(uploadPreview || field.value) && (
                           <div className="relative w-20 h-20 rounded-md overflow-hidden border">
                             <img
@@ -313,13 +372,26 @@ export default function ProductsPage() {
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <span>or enter URL:</span>
                         </div>
-                        <FormControl>
-                          <Input 
-                            {...field} 
-                            placeholder="https://example.com/image.jpg"
-                            data-testid="input-product-image" 
-                          />
-                        </FormControl>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <FormControl>
+                              <Input 
+                                {...field} 
+                                placeholder="https://example.com/image.jpg"
+                                data-testid="input-product-image" 
+                              />
+                            </FormControl>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleProcessUrl}
+                            disabled={isUploading || !form.getValues("imageUrl") || form.getValues("imageUrl")?.startsWith('/uploads/') || false}
+                            data-testid="button-process-url"
+                          >
+                            {isUploading ? "Processing..." : "Process"}
+                          </Button>
+                        </div>
                       </div>
                       <FormMessage />
                     </FormItem>
@@ -472,7 +544,6 @@ export default function ProductsPage() {
                   <th className="text-left p-4 font-medium">{t("products.name")}</th>
                   <th className="text-left p-4 font-medium">{t("products.category")}</th>
                   <th className="text-left p-4 font-medium">{t("products.price")}</th>
-                  <th className="text-left p-4 font-medium">{t("products.sku")}</th>
                   <th className="text-right p-4 font-medium">{t("products.actions")}</th>
                 </tr>
               </thead>
@@ -504,7 +575,6 @@ export default function ProductsPage() {
                         <span className="font-medium">€{product.price}</span>
                       )}
                     </td>
-                    <td className="p-4 text-muted-foreground">{product.sku || "-"}</td>
                     <td className="p-4 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

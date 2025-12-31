@@ -57,7 +57,6 @@ interface ConnectorProduct {
   price?: string | number;
   discountPrice?: string | number;
   imageUrl?: string;
-  sku?: string;
   description?: string;
   connectorId?: string;
   connectorName?: string;
@@ -379,7 +378,6 @@ export default function CampaignWizardPage() {
                 name: sp.product.name,
                 description: sp.product.description,
                 barcode: (sp.product as any).barcode || null,
-                sku: sp.product.sku,
                 category: sp.product.category,
                 price: sp.product.price,
                 discountPrice: sp.product.discountPrice,
@@ -584,7 +582,6 @@ export default function CampaignWizardPage() {
         price: connectorProduct.price?.toString() || "0",
         discountPrice: connectorProduct.discountPrice?.toString() || null,
         imageUrl: connectorProduct.imageUrl || null,
-        sku: connectorProduct.sku || null,
         description: connectorProduct.description || null,
         category: null,
         discountPercentage: null,

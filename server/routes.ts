@@ -8,6 +8,8 @@ import session from "express-session";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import sharp from "sharp";
+import crypto from "crypto";
 import {
   loginSchema, registerSchema, resetPasswordSchema, verifyTotpSchema, tenantSetupSchema,
   insertProductSchema, insertTemplateSchema, insertCampaignSchema,
@@ -47,6 +49,33 @@ const upload = multer({
 });
 
 const JWT_SECRET = process.env.SESSION_SECRET || "your-secret-key";
+
+// Helper function to get tenant-specific upload directory and save image with SHA-256 hash
+async function getTenantImagePath(tenantId: string | null, buffer: Buffer): Promise<string> {
+  if (!tenantId) {
+    throw new Error("Tenant ID is required");
+  }
+  
+  const tenant = await storage.getTenant(tenantId);
+  if (!tenant || !tenant.code) {
+    throw new Error("Tenant not found");
+  }
+  
+  const tenantCode = tenant.code.toLowerCase();
+  const tenantDir = path.join(uploadsDir, tenantCode);
+  
+  // Create tenant directory if it doesn't exist
+  if (!fs.existsSync(tenantDir)) {
+    fs.mkdirSync(tenantDir, { recursive: true });
+  }
+  
+  // Generate SHA-256 hash of the buffer
+  const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+  const fileName = `${hash}.png`;
+  const filePath = path.join(tenantDir, fileName);
+  
+  return filePath;
+}
 
 async function seedSuperAdmin() {
   try {
@@ -155,12 +184,81 @@ export async function registerRoutes(
 
   app.use("/uploads", (await import("express")).default.static(uploadsDir));
 
-  app.post("/api/upload", authenticate, upload.single("file"), (req: AuthRequest, res: Response) => {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
+  app.post("/api/upload", authenticate, upload.single("file"), async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      const removeBackground = req.body?.removeBackground === "true" || req.query?.removeBackground === "true";
+      const originalFilePath = path.join(uploadsDir, req.file.filename);
+      
+      try {
+        // Read the original file
+        const fileBuffer = await fs.promises.readFile(originalFilePath);
+        
+        // Convert to PNG format
+        const pngBuffer = await sharp(fileBuffer)
+          .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        
+        // Delete the original uploaded file
+        await fs.promises.unlink(originalFilePath).catch(() => {});
+        
+        const tenant = await storage.getTenant(req.user!.tenantId!);
+        const tenantCode = tenant?.code?.toLowerCase() || "";
+        if (!tenantCode) throw new Error("Invalid tenant code");
+        const tenantDir = path.join(uploadsDir, tenantCode);
+        
+        // Create tenant directory if it doesn't exist
+        if (!fs.existsSync(tenantDir)) {
+          fs.mkdirSync(tenantDir, { recursive: true });
+        }
+        
+        let finalBuffer = pngBuffer;
+        let tempFilePath: string | null = null;
+        
+        // If background removal is enabled, process the PNG
+        if (removeBackground) {
+          try {
+            // Save PNG temporarily for background removal
+            tempFilePath = path.join(uploadsDir, `temp_${Date.now()}.png`);
+            await fs.promises.writeFile(tempFilePath, pngBuffer);
+            
+            const bgRemovedPath = await removeBackgroundFromUrl(tempFilePath, uploadsDir);
+            finalBuffer = await fs.promises.readFile(bgRemovedPath);
+            
+            // Clean up temporary files
+            await fs.promises.unlink(tempFilePath).catch(() => {});
+            await fs.promises.unlink(bgRemovedPath).catch(() => {});
+          } catch (error) {
+            console.error("Background removal error:", error);
+            // If background removal fails, use the PNG buffer
+            await fs.promises.unlink(tempFilePath || "").catch(() => {});
+          }
+        }
+        
+        // Hash the final image buffer (after background removal if enabled)
+        const hash = crypto.createHash('sha256').update(finalBuffer).digest('hex');
+        const fileName = `${hash}.png`;
+        const finalImagePath = path.join(tenantDir, fileName);
+        
+        // Save the final image
+        await fs.promises.writeFile(finalImagePath, finalBuffer);
+        
+        const fileUrl = `/uploads/${tenantCode}/${fileName}`;
+        res.json({ url: fileUrl });
+      } catch (error) {
+        console.error("Image conversion error:", error);
+        // Clean up the original file if conversion failed
+        await fs.promises.unlink(originalFilePath).catch(() => {});
+        res.status(500).json({ error: "Failed to process image" });
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ error: "Upload failed" });
     }
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({ url: fileUrl });
   });
 
   const isValidImageUrl = (url: string): boolean => {
@@ -183,6 +281,98 @@ export async function registerRoutes(
     }
   };
 
+  app.post("/api/upload-from-url", authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+      const { imageUrl, removeBackground: shouldRemoveBackground } = req.body;
+      if (!imageUrl) {
+        return res.status(400).json({ error: "Image URL is required" });
+      }
+
+      if (!isValidImageUrl(imageUrl)) {
+        return res.status(400).json({ error: "Invalid image URL" });
+      }
+
+      const resolvedUrl = imageUrl.startsWith('/uploads/') 
+        ? path.join(uploadsDir, imageUrl.replace('/uploads/', ''))
+        : imageUrl;
+
+      try {
+        // Download and convert to PNG
+        let buffer: Buffer;
+        if (resolvedUrl.startsWith('/uploads/') || !resolvedUrl.startsWith('http')) {
+          buffer = await fs.promises.readFile(resolvedUrl);
+        } else {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30000);
+          const response = await fetch(resolvedUrl, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            }
+          });
+          clearTimeout(timeout);
+          if (!response.ok) throw new Error('Failed to fetch image');
+          buffer = Buffer.from(await response.arrayBuffer());
+        }
+        
+        const pngBuffer = await sharp(buffer)
+          .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toBuffer();
+
+        const tenant1 = await storage.getTenant(req.user!.tenantId!);
+        const tenantCode = tenant1?.code?.toLowerCase() || "";
+        if (!tenantCode) throw new Error("Invalid tenant code");
+        const tenantDir = path.join(uploadsDir, tenantCode);
+        
+        // Create tenant directory if it doesn't exist
+        if (!fs.existsSync(tenantDir)) {
+          fs.mkdirSync(tenantDir, { recursive: true });
+        }
+        
+        let finalBuffer = pngBuffer;
+        let tempFilePath: string | null = null;
+
+        // If background removal is enabled, process it
+        if (shouldRemoveBackground) {
+          try {
+            // Save PNG temporarily for background removal
+            tempFilePath = path.join(uploadsDir, `temp_${Date.now()}.png`);
+            await fs.promises.writeFile(tempFilePath, pngBuffer);
+            
+            const bgRemovedPath = await removeBackgroundFromUrl(tempFilePath, uploadsDir);
+            finalBuffer = await fs.promises.readFile(bgRemovedPath);
+            
+            // Clean up temporary files
+            await fs.promises.unlink(tempFilePath).catch(() => {});
+            await fs.promises.unlink(bgRemovedPath).catch(() => {});
+          } catch (error) {
+            console.error("Background removal error:", error);
+            // If background removal fails, use the PNG buffer
+            await fs.promises.unlink(tempFilePath || "").catch(() => {});
+          }
+        }
+
+        // Hash the final image buffer (after background removal if enabled)
+        const hash = crypto.createHash('sha256').update(finalBuffer).digest('hex');
+        const fileName = `${hash}.png`;
+        const finalImagePath = path.join(tenantDir, fileName);
+        
+        // Save the final image
+        await fs.promises.writeFile(finalImagePath, finalBuffer);
+        
+        const fileUrl = `/uploads/${tenantCode}/${fileName}`;
+        res.json({ url: fileUrl, success: true });
+      } catch (error) {
+        console.error("Image processing error:", error);
+        res.status(500).json({ error: "Failed to process image" });
+      }
+    } catch (error) {
+      console.error("Upload from URL error:", error);
+      res.status(500).json({ error: "Failed to process image from URL" });
+    }
+  });
+
   app.get("/api/image-processing/presets", authenticate, (_req: AuthRequest, res: Response) => {
     const presets = getAvailablePresets();
     res.json({ presets });
@@ -199,13 +389,35 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid image URL" });
       }
 
+      const tenant2 = await storage.getTenant(req.user!.tenantId!);
+      const tenantCode = tenant2?.code?.toLowerCase() || "";
+      if (!tenantCode) throw new Error("Invalid tenant code");
+      const tenantDir = path.join(uploadsDir, tenantCode);
+      
+      // Create tenant directory if it doesn't exist
+      if (!fs.existsSync(tenantDir)) {
+        fs.mkdirSync(tenantDir, { recursive: true });
+      }
+      
       const resolvedUrl = imageUrl.startsWith('/uploads/') 
         ? path.join(uploadsDir, imageUrl.replace('/uploads/', ''))
         : imageUrl;
 
       const outputPath = await removeBackgroundFromUrl(resolvedUrl, uploadsDir);
-      const fileName = path.basename(outputPath);
-      const resultUrl = `/uploads/${fileName}`;
+      const processedBuffer = await fs.promises.readFile(outputPath);
+      
+      // Hash the processed image
+      const hash = crypto.createHash('sha256').update(processedBuffer).digest('hex');
+      const fileName = `${hash}.png`;
+      const finalImagePath = path.join(tenantDir, fileName);
+      
+      // Save the final image
+      await fs.promises.writeFile(finalImagePath, processedBuffer);
+      
+      // Delete the temporary processed file
+      await fs.promises.unlink(outputPath).catch(() => {});
+      
+      const resultUrl = `/uploads/${tenantCode}/${fileName}`;
       
       res.json({ url: resultUrl, success: true });
     } catch (error) {
@@ -225,13 +437,35 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid image URL" });
       }
 
+      const tenant3 = await storage.getTenant(req.user!.tenantId!);
+      const tenantCode = tenant3?.code?.toLowerCase() || "";
+      if (!tenantCode) throw new Error("Invalid tenant code");
+      const tenantDir = path.join(uploadsDir, tenantCode);
+      
+      // Create tenant directory if it doesn't exist
+      if (!fs.existsSync(tenantDir)) {
+        fs.mkdirSync(tenantDir, { recursive: true });
+      }
+      
       const resolvedUrl = imageUrl.startsWith('/uploads/') 
         ? path.join(uploadsDir, imageUrl.replace('/uploads/', ''))
         : imageUrl;
 
       const outputPath = await applyPresetFromUrl(resolvedUrl, preset, uploadsDir);
-      const fileName = path.basename(outputPath);
-      const resultUrl = `/uploads/${fileName}`;
+      const processedBuffer = await fs.promises.readFile(outputPath);
+      
+      // Hash the processed image
+      const hash = crypto.createHash('sha256').update(processedBuffer).digest('hex');
+      const fileName = `${hash}.png`;
+      const finalImagePath = path.join(tenantDir, fileName);
+      
+      // Save the final image
+      await fs.promises.writeFile(finalImagePath, processedBuffer);
+      
+      // Delete the temporary processed file
+      await fs.promises.unlink(outputPath).catch(() => {});
+      
+      const resultUrl = `/uploads/${tenantCode}/${fileName}`;
       
       res.json({ url: resultUrl, success: true });
     } catch (error) {
@@ -1316,7 +1550,6 @@ export async function registerRoutes(
             tenantId: req.user!.tenantId!,
             name: product.externalProductData.name || "External Product",
             description: product.externalProductData.description || null,
-            sku: product.externalProductData.sku || null,
             category: product.externalProductData.category || "External",
             price: product.externalProductData.price?.toString() || "0",
             discountPrice: product.externalProductData.discountPrice?.toString() || null,
